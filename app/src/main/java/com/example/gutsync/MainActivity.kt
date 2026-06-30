@@ -2,10 +2,16 @@ package com.example.gutsync
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AddCircle
@@ -14,45 +20,90 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
-import com.example.gutsync.ui.components.LiquidBackground
-import com.example.gutsync.ui.screens.AskGeminiScreen
-import com.example.gutsync.ui.screens.DashboardScreen
-import com.example.gutsync.ui.screens.InsightsScreen
-import com.example.gutsync.ui.screens.MealLoggerScreen
-import com.example.gutsync.ui.screens.TrendsScreen
-import com.example.gutsync.ui.theme.GutsyncTheme
-
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import com.example.gutsync.data.auth.AccountType
+import com.example.gutsync.data.auth.AuthSession
+import com.example.gutsync.data.auth.GoogleAuthHelper
+import com.example.gutsync.data.auth.SessionManager
+import com.example.gutsync.ui.components.LiquidBackground
+import com.example.gutsync.ui.screens.*
+import com.example.gutsync.ui.theme.GutsyncTheme
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.common.api.ApiException
 import kotlin.math.roundToInt
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
+    private lateinit var sessionManager: SessionManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        sessionManager = SessionManager(this)
+
         setContent {
+            val viewModel: GutSyncViewModel = viewModel()
+            var currentSession by remember { mutableStateOf(sessionManager.getSession()) }
+
+            val googleSignInLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                try {
+                    val account = task.getResult(ApiException::class.java)
+                    if (account != null) {
+                        viewModel.syncWithDrive(this@MainActivity, account) { newSession ->
+                            currentSession = newSession
+                        }
+                    }
+                } catch (e: ApiException) {
+                    e.printStackTrace()
+                }
+            }
+
             GutsyncTheme {
                 Box(modifier = Modifier.fillMaxSize()) {
                     LiquidBackground()
-                    MainNavigation()
+                    
+                    if (currentSession.isLoggedIn) {
+                        MainNavigation(
+                            session = currentSession,
+                            onConnectDrive = {
+                                googleSignInLauncher.launch(GoogleAuthHelper.getSignInIntent(this@MainActivity))
+                            },
+                            onSignOut = {
+                                sessionManager.clearSession()
+                                currentSession = AuthSession()
+                            },
+                            viewModel = viewModel
+                        )
+                    } else {
+                        LoginScreen(
+                            onSignInWithGoogle = {
+                                googleSignInLauncher.launch(GoogleAuthHelper.getSignInIntent(this@MainActivity))
+                            },
+                            onContinueOffline = {
+                                val offlineSession = AuthSession(
+                                    isLoggedIn = true,
+                                    accountType = AccountType.OFFLINE,
+                                    displayName = "Guest User"
+                                )
+                                sessionManager.saveSession(offlineSession)
+                                currentSession = offlineSession
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -60,7 +111,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainNavigation() {
+fun MainNavigation(
+    session: AuthSession,
+    onConnectDrive: () -> Unit,
+    onSignOut: () -> Unit,
+    viewModel: GutSyncViewModel
+) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf(
         NavigationItem("Home", Icons.Default.Home),
@@ -73,16 +129,16 @@ fun MainNavigation() {
     // Scroll state for hiding navigation
     var navVisible by remember { mutableStateOf(true) }
     val navOffset by animateFloatAsState(
-        targetValue = if (navVisible) 0f else 300f, // Increased offset for complete hiding
+        targetValue = if (navVisible) 0f else 300f,
         label = "nav_offset"
     )
 
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y < -15) { // Scrolling down
+                if (available.y < -15) {
                     if (navVisible) navVisible = false
-                } else if (available.y > 15) { // Scrolling up
+                } else if (available.y > 15) {
                     if (!navVisible) navVisible = true
                 }
                 return Offset.Zero
@@ -105,16 +161,20 @@ fun MainNavigation() {
                 color = Color.Transparent
             ) {
                 when (selectedTab) {
-                    0 -> DashboardScreen()
-                    1 -> MealLoggerScreen()
-                    2 -> TrendsScreen()
+                    0 -> DashboardScreen(
+                        session = session,
+                        onConnectDrive = onConnectDrive,
+                        onSignOut = onSignOut,
+                        viewModel = viewModel
+                    )
+                    1 -> MealLoggerScreen(viewModel = viewModel)
+                    2 -> TrendsScreen(viewModel = viewModel)
                     3 -> InsightsScreen()
-                    4 -> AskGeminiScreen()
+                    4 -> AskGeminiScreen(viewModel = viewModel)
                 }
             }
         }
 
-        // Place Dynamic Island directly in the root Box
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -138,14 +198,12 @@ fun DynamicIslandNav(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
-    // Dynamic Island Container
     Box(
         modifier = Modifier
             .height(64.dp)
             .widthIn(max = 350.dp)
             .clip(CircleShape)
     ) {
-        // 1. Background Layer with Blur (Separate from Content to keep icons sharp)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -153,7 +211,6 @@ fun DynamicIslandNav(
                 .background(Color.Black.copy(alpha = 0.4f))
         )
 
-        // 2. Content Layer (Border and Icons)
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = Color.Transparent,
@@ -205,8 +262,5 @@ fun DynamicIslandNav(
         }
     }
 }
-
-
-
 
 data class NavigationItem(val label: String, val icon: ImageVector)

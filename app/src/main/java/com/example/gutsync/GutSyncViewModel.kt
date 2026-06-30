@@ -1,33 +1,41 @@
 package com.example.gutsync
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.gutsync.data.ChatMessage
+import com.example.gutsync.data.MessageRole
 import com.example.gutsync.data.NutrientData
+import com.example.gutsync.data.auth.AuthSession
+import com.example.gutsync.data.storage.AppData
+import com.example.gutsync.data.storage.GutSyncRepository
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.Schema
 import com.google.firebase.ai.type.generationConfig
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-import com.example.gutsync.data.ChatMessage
-import com.example.gutsync.data.MessageRole
+class GutSyncViewModel(application: Application) : AndroidViewModel(application) {
+    private val repository = GutSyncRepository(application)
 
-class GutSyncViewModel : ViewModel() {
     private val _uiState: MutableStateFlow<UiState> =
         MutableStateFlow(UiState.Initial)
     val uiState: StateFlow<UiState> =
         _uiState.asStateFlow()
 
-    private val _chatHistory = MutableStateFlow<List<ChatMessage>>(emptyList())
-    val chatHistory: StateFlow<List<ChatMessage>> = _chatHistory.asStateFlow()
+    val appData: StateFlow<AppData> = repository.appData
 
     private val _analyzedFood: MutableStateFlow<NutrientData?> = MutableStateFlow(null)
     val analyzedFood: StateFlow<NutrientData?> = _analyzedFood.asStateFlow()
+
+    val chatHistory: StateFlow<List<ChatMessage>> = repository.appData
+        .map { it.chats }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private val generativeModel = Firebase.ai.generativeModel(
         modelName = "gemini-2.5-flash",
@@ -80,9 +88,19 @@ class GutSyncViewModel : ViewModel() {
         }
     }
 
+    fun addAnalyzedFood() {
+        analyzedFood.value?.let { nutrients ->
+            viewModelScope.launch {
+                repository.addMeal(nutrients)
+                _analyzedFood.value = null
+            }
+        }
+    }
+
     fun askFoodQuestion(question: String) {
-        // Add user message to history
-        _chatHistory.value = _chatHistory.value + ChatMessage(question, MessageRole.USER)
+        viewModelScope.launch {
+            repository.addChatMessage(ChatMessage(question, MessageRole.USER))
+        }
         
         _uiState.value = UiState.Loading
         val chatModel = Firebase.ai.generativeModel(modelName = "gemini-2.5-flash")
@@ -101,8 +119,9 @@ class GutSyncViewModel : ViewModel() {
                         .replace("*", "")
                         .replace("#", "")
                     
-                    // Add model message to history
-                    _chatHistory.value = _chatHistory.value + ChatMessage(cleanContent, MessageRole.MODEL)
+                    viewModelScope.launch {
+                        repository.addChatMessage(ChatMessage(cleanContent, MessageRole.MODEL))
+                    }
                     _uiState.value = UiState.Success(cleanContent)
                 }
             } catch (e: Exception) {
@@ -111,27 +130,16 @@ class GutSyncViewModel : ViewModel() {
         }
     }
 
-    fun generateMicrobiomeReport(foodItems: List<String>) {
-        _uiState.value = UiState.Loading
-        val chatModel = Firebase.ai.generativeModel(modelName = "gemini-2.5-flash")
-
-        viewModelScope.launch(Dispatchers.IO) {
+    fun syncWithDrive(context: android.content.Context, account: com.google.android.gms.auth.api.signin.GoogleSignInAccount, onComplete: (AuthSession) -> Unit) {
+        viewModelScope.launch {
             try {
-                val prompt = "Based on the following food items logged today: ${foodItems.joinToString()}, " +
-                        "provide a concise microbiome health report focusing on shifts in Bifidobacterium, " +
-                        "Lactobacillus, Akkermansia, and Bacteroides. Keep it professional and encouraging."
-                val response = chatModel.generateContent(prompt)
-                response.text?.let { outputContent ->
-                    // Clean up markdown symbols like ** and # manually to ensure they don't appear in UI
-                    val cleanContent = outputContent
-                        .replace("**", "")
-                        .replace("*", "")
-                        .replace("#", "")
-                    _uiState.value = UiState.Success(cleanContent)
-                }
+                val drive = com.example.gutsync.data.auth.GoogleAuthHelper.getDriveService(context, account)
+                val newSession = repository.syncWithDrive(drive)
+                onComplete(newSession)
             } catch (e: Exception) {
-                _uiState.value = UiState.Error(e.localizedMessage ?: "An error occurred")
+                e.printStackTrace()
             }
         }
     }
+
 }

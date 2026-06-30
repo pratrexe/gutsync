@@ -8,8 +8,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -19,12 +25,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.data.MicrobeType
+import com.example.gutsync.data.auth.AccountType
+import com.example.gutsync.data.auth.AuthSession
 import com.example.gutsync.ui.theme.SurfaceContainerHighest
 import com.example.gutsync.ui.theme.SurfaceContainerLowest
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
-fun DashboardScreen() {
+fun DashboardScreen(
+    session: AuthSession,
+    onConnectDrive: () -> Unit,
+    onSignOut: () -> Unit,
+    viewModel: GutSyncViewModel = viewModel()
+) {
+    val appData by viewModel.appData.collectAsState()
+    val profile = appData.profile
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -33,15 +51,22 @@ fun DashboardScreen() {
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         item { Spacer(modifier = Modifier.height(16.dp)) }
-        
-        // Score Hero Section
+
         item {
-            ScoreHeroSection(score = 84, growth = 12)
+            AccountCard(
+                session = session,
+                onConnectDrive = onConnectDrive,
+                onSignOut = onSignOut
+            )
+        }
+
+        item {
+            ScoreHeroSection(score = profile.healthScore, growth = profile.growthPercentage)
         }
 
         // Fiber Goal Card
         item {
-            GoalCard(label = "Fiber Intake", current = 24, goal = 35)
+            GoalCard(label = "Fiber Intake", current = profile.currentFiber, goal = profile.fiberGoal)
         }
 
         // Microbe Status Grid
@@ -58,6 +83,87 @@ fun DashboardScreen() {
         }
 
         item { Spacer(modifier = Modifier.height(100.dp)) }
+    }
+}
+
+@Composable
+fun AccountCard(
+    session: AuthSession,
+    onConnectDrive: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "ACCOUNT",
+                fontSize = 12.sp,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = session.displayName,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = if (session.isDriveConnected) Icons.Default.Cloud else Icons.Default.CloudOff,
+                    contentDescription = null,
+                    tint = if (session.isDriveConnected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = when {
+                        session.isDriveConnected && session.email != null ->
+                            "Synced with Google Drive · ${session.email}"
+                        session.accountType == AccountType.GOOGLE ->
+                            "Google account · Drive setup pending"
+                        else -> "Offline account · local storage only"
+                    },
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp
+                )
+            }
+
+            if (!session.isDriveConnected) {
+                Button(
+                    onClick = onConnectDrive,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color.Black
+                    ),
+                    shape = CircleShape,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Connect Google Drive", fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            TextButton(
+                onClick = onSignOut,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Sign out", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 

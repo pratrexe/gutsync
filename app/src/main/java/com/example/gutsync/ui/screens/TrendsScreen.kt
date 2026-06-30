@@ -1,5 +1,6 @@
 package com.example.gutsync.ui.screens
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,12 +18,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.gutsync.GutSyncViewModel
+import com.example.gutsync.data.MicrobeImpactCalculator
 import com.example.gutsync.ui.theme.SurfaceContainerLow
 import com.example.gutsync.ui.theme.SurfaceContainerLowest
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
-fun TrendsScreen() {
+fun TrendsScreen(viewModel: GutSyncViewModel = viewModel()) {
     var selectedView by remember { mutableStateOf("Weekly") }
+    val appData by viewModel.appData.collectAsState()
+    
+    // Calculate real trends from meal history
+    val recentMeals = appData.meals.takeLast(7)
+    val trendData = recentMeals.map { log ->
+        val impact = MicrobeImpactCalculator.calculateImpact(log.nutrients)
+        val pro = (impact.first / 100f).coerceIn(0.1f, 0.9f)
+        pro to (1f - pro)
+    }.toMutableList()
+    
+    // Pad with placeholders if less than 7 meals
+    while (trendData.size < 7) {
+        trendData.add(0, 0.5f to 0.5f)
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -68,7 +86,8 @@ fun TrendsScreen() {
                         Text(text = "BIOLOGICAL INSIGHT", fontSize = 10.sp, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(
-                        text = "Your Akkermansia levels have stabilized by 12% following a high-polyphenol diet this week.",
+                        text = if (recentMeals.isEmpty()) "Start logging your meals to see biological insights." 
+                               else "Your Akkermansia levels are responding to your recent dietary patterns.",
                         fontSize = 18.sp,
                         color = Color.White,
                         lineHeight = 28.sp
@@ -110,10 +129,8 @@ fun TrendsScreen() {
                         verticalAlignment = Alignment.Bottom
                     ) {
                         val labels = if (selectedView == "Weekly") listOf("M", "T", "W", "T", "F", "S", "S") else listOf("W1", "W2", "W3", "W4", "W5", "W6", "W7")
-                        val data = if (selectedView == "Weekly") listOf(0.6f to 0.4f, 0.45f to 0.55f, 0.3f to 0.7f, 0.8f to 0.2f, 0.5f to 0.5f, 0.2f to 0.8f, 0.15f to 0.85f)
-                                   else listOf(0.4f to 0.6f, 0.6f to 0.4f, 0.2f to 0.8f, 0.3f to 0.7f, 0.7f to 0.3f, 0.5f to 0.5f, 0.45f to 0.55f)
                         
-                        data.forEachIndexed { index, (pro, anti) ->
+                        trendData.forEachIndexed { index, (pro, anti) ->
                             BarColumn(labels[index], pro, anti)
                         }
                     }
@@ -123,8 +140,9 @@ fun TrendsScreen() {
 
         // Secondary Stats
         item {
+            val totalFiber = recentMeals.sumOf { it.nutrients.fiber.toInt() }
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard("Fiber Intake", "32g", 0.7f, Modifier.weight(1f))
+                StatCard("Fiber Intake", "${totalFiber}g", (totalFiber / 35f).coerceAtMost(1f), Modifier.weight(1f))
                 StatCard("Hydration", "2.4L", 0.85f, Modifier.weight(1f))
             }
         }

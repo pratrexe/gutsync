@@ -72,8 +72,18 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                         if (uiState is UiState.Loading) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
                         } else {
-                            TextButton(onClick = { viewModel.analyzeFood(searchQuery) }) {
-                                Text("Analyze", color = Color.White)
+                            if (analyzedFood != null && searchQuery.isBlank()) {
+                                Button(
+                                    onClick = { viewModel.addAnalyzedFood() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Confirm")
+                                }
+                            } else {
+                                TextButton(onClick = { viewModel.analyzeFood(searchQuery); searchQuery = "" }) {
+                                    Text("Analyze", color = Color.White)
+                                }
                             }
                         }
                     }
