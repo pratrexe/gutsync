@@ -18,12 +18,14 @@ object GoogleAuthHelper {
     const val DATA_FILE_NAME = "gutsync_data.json"
 
     fun getSignInClient(context: Context): GoogleSignInClient {
+        // Adding requestIdToken can sometimes help resolve StatusCode 10 errors
         val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestScopes(Scope(DriveScopes.DRIVE_FILE))
             .build()
         return GoogleSignIn.getClient(context, options)
     }
+
 
     fun getSignInIntent(context: Context): Intent =
         getSignInClient(context).signInIntent

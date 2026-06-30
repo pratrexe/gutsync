@@ -45,6 +45,9 @@ import com.google.android.gms.common.api.ApiException
 import kotlin.math.roundToInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 
+import android.util.Log
+import com.google.android.gms.common.api.CommonStatusCodes
+
 class MainActivity : ComponentActivity() {
     private lateinit var sessionManager: SessionManager
 
@@ -63,11 +66,15 @@ class MainActivity : ComponentActivity() {
                 try {
                     val account = task.getResult(ApiException::class.java)
                     if (account != null) {
+                        Log.d("GutSyncAuth", "Google Sign-In Successful: ${account.email}")
                         viewModel.syncWithDrive(this@MainActivity, account) { newSession ->
+                            Log.d("GutSyncAuth", "Drive Sync Complete: ${newSession.isDriveConnected}")
                             currentSession = newSession
                         }
                     }
                 } catch (e: ApiException) {
+                    val message = CommonStatusCodes.getStatusCodeString(e.statusCode)
+                    Log.e("GutSyncAuth", "Google Sign-In Failed: Status Code ${e.statusCode} ($message)")
                     e.printStackTrace()
                 }
             }

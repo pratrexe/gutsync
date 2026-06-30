@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.data.MicrobeType
+import com.example.gutsync.data.MicrobeImpactCalculator
+import com.example.gutsync.data.NutrientData
 import com.example.gutsync.data.auth.AccountType
 import com.example.gutsync.data.auth.AuthSession
 import com.example.gutsync.ui.theme.SurfaceContainerHighest
@@ -41,7 +43,23 @@ fun DashboardScreen(
     viewModel: GutSyncViewModel = viewModel()
 ) {
     val appData by viewModel.appData.collectAsState()
-    val profile = appData.profile
+    val meals = appData.meals
+    
+    // Calculate REAL status based on meal history
+    val currentNutrients = if (meals.isNotEmpty()) {
+        // Average/Sum of last 24h for a realistic daily view
+        val last24h = System.currentTimeMillis() - (24 * 60 * 60 * 1000)
+        val recentMeals = meals.filter { it.timestamp > last24h }
+        NutrientData(
+            fiber = recentMeals.sumOf { it.nutrients.fiber.toDouble() }.toFloat(),
+            polyphenols = recentMeals.sumOf { it.nutrients.polyphenols.toDouble() }.toFloat(),
+            fermentedCultures = recentMeals.sumOf { it.nutrients.fermentedCultures.toDouble() }.toInt(),
+            saturatedFats = recentMeals.sumOf { it.nutrients.saturatedFats.toDouble() }.toFloat(),
+            refinedSugars = recentMeals.sumOf { it.nutrients.refinedSugars.toDouble() }.toFloat()
+        )
+    } else NutrientData()
+
+    val (healthScore, shifts) = MicrobeImpactCalculator.calculateImpact(currentNutrients)
 
     LazyColumn(
         modifier = Modifier
@@ -61,29 +79,55 @@ fun DashboardScreen(
         }
 
         item {
-            ScoreHeroSection(score = profile.healthScore, growth = profile.growthPercentage)
+            ScoreHeroSection(score = healthScore, growth = appData.profile.growthPercentage)
         }
 
         // Fiber Goal Card
         item {
-            GoalCard(label = "Fiber Intake", current = profile.currentFiber, goal = profile.fiberGoal)
+            GoalCard(label = "Fiber Intake", current = currentNutrients.fiber.toInt(), goal = appData.profile.fiberGoal)
         }
 
-        // Microbe Status Grid
+        // Microbe Status Grid (REAL DATA)
         item {
-            MicrobeStatusGrid()
+            MicrobeStatusGrid(shifts)
         }
 
         // Insight Card
         item {
-            InsightCard(
-                title = "Focus: Mucosal Integrity",
-                description = "Your Akkermansia levels are currently below the target range. Consider adding polyphenol-rich foods like pomegranate or green tea."
-            )
+            val insight = when {
+                healthScore < 50 -> "Pro-inflammatory" to "Your gut diversity is low. Focus on increasing prebiotic fiber and reducing refined sugars."
+                healthScore < 80 -> "Building Stability" to "Good progress! Your microbiome is stabilizing. Add more fermented foods to boost Lactobacillus."
+                else -> "Optimal Diversity" to "Excellent! Your dietary patterns are promoting a highly diverse and stable microbial environment."
+            }
+            InsightCard(title = "Focus: ${insight.first}", description = insight.second)
         }
 
         item { Spacer(modifier = Modifier.height(100.dp)) }
     }
+}
+
+@Composable
+fun MicrobeStatusGrid(shifts: List<com.example.gutsync.data.MicrobeShift>) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            val bifido = shifts.find { it.microbeType == MicrobeType.BIFIDOBACTERIUM }?.shiftPercentage?.toInt()?.coerceIn(0, 100) ?: 50
+            val lacto = shifts.find { it.microbeType == MicrobeType.LACTOBACILLUS }?.shiftPercentage?.toInt()?.coerceIn(0, 100) ?: 50
+            MicrobeStatusCard(MicrobeType.BIFIDOBACTERIUM, bifido, getStatusText(bifido), Modifier.weight(1f))
+            MicrobeStatusCard(MicrobeType.LACTOBACILLUS, lacto, getStatusText(lacto), Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            val akker = shifts.find { it.microbeType == MicrobeType.AKKERMANSIA }?.shiftPercentage?.toInt()?.coerceIn(0, 100) ?: 50
+            val bacter = shifts.find { it.microbeType == MicrobeType.BACTEROIDES }?.shiftPercentage?.toInt()?.coerceIn(0, 100) ?: 50
+            MicrobeStatusCard(MicrobeType.AKKERMANSIA, akker, getStatusText(akker), Modifier.weight(1f))
+            MicrobeStatusCard(MicrobeType.BACTEROIDES, bacter, getStatusText(bacter), Modifier.weight(1f))
+        }
+    }
+}
+
+fun getStatusText(percentage: Int) = when {
+    percentage < 30 -> "Low"
+    percentage < 70 -> "Moderate"
+    else -> "Optimal"
 }
 
 @Composable
@@ -255,25 +299,11 @@ fun GoalCard(label: String, current: Int, goal: Int) {
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(current.toFloat() / goal)
+                        .fillMaxWidth(if (goal > 0) current.toFloat() / goal else 0f)
                         .fillMaxHeight()
                         .background(Color.White, CircleShape)
                 )
             }
-        }
-    }
-}
-
-@Composable
-fun MicrobeStatusGrid() {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            MicrobeStatusCard(MicrobeType.BIFIDOBACTERIUM, 85, "Optimal", Modifier.weight(1f))
-            MicrobeStatusCard(MicrobeType.LACTOBACILLUS, 72, "Optimal", Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            MicrobeStatusCard(MicrobeType.AKKERMANSIA, 15, "Low", Modifier.weight(1f))
-            MicrobeStatusCard(MicrobeType.BACTEROIDES, 45, "Moderate", Modifier.weight(1f))
         }
     }
 }
