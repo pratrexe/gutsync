@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
     var searchQuery by remember { mutableStateOf("") }
+    val appData by viewModel.appData.collectAsState()
     val analyzedFood by viewModel.analyzedFood.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val capturedImage by viewModel.capturedImage.collectAsState()
@@ -174,20 +175,19 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
             }
         }
 
-        // Recent Items
+        // Recent Items (REAL DATA)
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom
             ) {
-                Text(text = "Recent Items", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-                Text(text = "View All", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text = "Recent Logs", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
             }
         }
 
-        items(recentItems) { item ->
-            RecentItemRow(item)
+        items(appData.meals.takeLast(10).reversed()) { entry ->
+            RealRecentItemRow(entry)
         }
 
         item { Spacer(modifier = Modifier.height(100.dp)) }
@@ -195,85 +195,15 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
 }
 
 @Composable
-fun ImpactScoreCard(nutrients: NutrientData?, modifier: Modifier = Modifier) {
-    val impact = nutrients?.let { MicrobeImpactCalculator.calculateImpact(it) }
-    val score = impact?.first ?: 0
-    val shiftText = if (nutrients != null) {
-        "This meal promotes beneficial microbes and improves gut integrity."
-    } else {
-        "Capture or describe a meal to see its microbial impact."
-    }
-
+fun RealRecentItemRow(entry: com.example.gutsync.data.storage.MealLogEntry) {
+    val nutrients = entry.nutrients
+    val timeStr = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(entry.timestamp))
+    
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceContainerLow),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2C2C2E)),
         shape = RoundedCornerShape(16.dp),
-        modifier = modifier.height(180.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            Text(
-                text = "MICROBE IMPACT",
-                fontSize = 12.sp,
-                letterSpacing = 1.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(text = score.toString(), fontSize = 48.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text(text = "/100", fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
-            }
-            Text(
-                text = shiftText,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 20.sp
-            )
-        }
-    }
-}
-
-@Composable
-fun BioticDensityCard(nutrients: NutrientData?, modifier: Modifier = Modifier) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = SurfaceContainerLow),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2C2C2E)),
-        shape = RoundedCornerShape(16.dp),
-        modifier = modifier.height(180.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "BIOTIC DENSITY",
-                fontSize = 12.sp,
-                letterSpacing = 1.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            BioticRow("Fiber", "${nutrients?.fiber ?: 0}g")
-            BioticRow("Polyphenols", "${nutrients?.polyphenols ?: 0}mg")
-            BioticRow("Fermented", "${nutrients?.fermentedCultures ?: 0} Active")
-        }
-    }
-}
-
-@Composable
-fun BioticRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = label, fontSize = 14.sp, color = Color.White)
-        Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
-    }
-}
-
-@Composable
-fun RecentItemRow(item: RecentItem) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = SurfaceContainerLow),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2C2C2E)),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth().alpha(if (item.faded) 0.4f else 1f)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -281,23 +211,22 @@ fun RecentItemRow(item: RecentItem) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Text(text = item.name, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-                Text(text = "${item.time} • ${item.calories} kcal", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text = nutrients.foodName, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                Text(text = "Logged at $timeStr • ${nutrients.calories} kcal", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(
-                onClick = {},
-                modifier = Modifier.background(Color.White, CircleShape)
+            Surface(
+                color = Color.White.copy(alpha = 0.1f),
+                shape = CircleShape
             ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black)
+                val score = MicrobeImpactCalculator.calculateImpact(nutrients).first
+                Text(
+                    text = score.toString(),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
 }
-
-data class RecentItem(val name: String, val time: String, val calories: Int, val faded: Boolean = false)
-
-val recentItems = listOf(
-    RecentItem("Steel Cut Oats", "Logged 4h ago", 250),
-    RecentItem("Greek Yogurt", "Logged 8h ago", 120),
-    RecentItem("Kombucha (Raw)", "Logged Yesterday", 30, faded = true)
-)

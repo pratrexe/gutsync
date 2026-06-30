@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gutsync.data.ChatMessage
+import com.example.gutsync.data.ChatSession
 import com.example.gutsync.data.MessageRole
 import com.example.gutsync.data.NutrientData
 import com.example.gutsync.data.auth.AuthSession
@@ -15,7 +16,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.Schema
-import com.google.firebase.ai.type.Tool
 import com.google.firebase.ai.type.content
 import com.google.firebase.ai.type.generationConfig
 import kotlinx.coroutines.Dispatchers
@@ -39,11 +39,11 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
     private val _capturedImage = MutableStateFlow<Bitmap?>(null)
     val capturedImage: StateFlow<Bitmap?> = _capturedImage.asStateFlow()
 
-    private val _currentChat = MutableStateFlow<List<ChatMessage>>(emptyList())
-    val currentChat: StateFlow<List<ChatMessage>> = _currentChat.asStateFlow()
+    private val _currentSession = MutableStateFlow(ChatSession())
+    val currentSession: StateFlow<ChatSession> = _currentSession.asStateFlow()
 
-    val chatHistory: StateFlow<List<ChatMessage>> = repository.appData
-        .map { it.chats }
+    val chatHistory: StateFlow<List<ChatSession>> = repository.appData
+        .map { it.chatSessions }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private val generativeModel = Firebase.ai.generativeModel(
@@ -71,8 +71,13 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun startNewChat() {
-        _currentChat.value = emptyList()
+        _currentSession.value = ChatSession()
         _uiState.value = UiState.Initial
+    }
+    
+    fun openSession(session: ChatSession) {
+        _currentSession.value = session
+        _uiState.value = if (session.messages.isNotEmpty()) UiState.Success("Loaded session") else UiState.Initial
     }
 
     fun analyzeFood(description: String, bitmap: Bitmap? = null) {
@@ -130,12 +135,9 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun askFoodQuestion(question: String) {
-        val userMsg = ChatMessage(question, MessageRole.USER)
-        _currentChat.value = _currentChat.value + userMsg
-        
-        viewModelScope.launch {
-            repository.addChatMessage(userMsg)
-        }
+        val userMsg = ChatMessage(text = question, role = MessageRole.USER)
+        val updatedMsgs = _currentSession.value.messages + userMsg
+        _currentSession.value = _currentSession.value.copy(messages = updatedMsgs)
         
         _uiState.value = UiState.Loading
         val chatModel = Firebase.ai.generativeModel(modelName = "gemini-2.0-flash")
@@ -154,12 +156,24 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                         .replace("*", "")
                         .replace("#", "")
                     
-                    val modelMsg = ChatMessage(cleanContent, MessageRole.MODEL)
-                    _currentChat.value = _currentChat.value + modelMsg
+                    val modelMsg = ChatMessage(text = cleanContent, role = MessageRole.MODEL)
+                    val finalMsgs = _currentSession.value.messages + modelMsg
                     
-                    viewModelScope.launch {
-                        repository.addChatMessage(modelMsg)
+                    // Update and generate summary if it's a new chat
+                    var summary = _currentSession.value.summary
+                    if (summary == "New Conversation" && finalMsgs.size >= 2) {
+                        val summaryPrompt = "Summarize this microbiome chat in 4 words or less: $question"
+                        summary = chatModel.generateContent(summaryPrompt).text?.replace("\"", "") ?: "Food Chat"
                     }
+                    
+                    val finalSession = _currentSession.value.copy(
+                        messages = finalMsgs,
+                        summary = summary,
+                        lastUpdated = System.currentTimeMillis()
+                    )
+                    
+                    _currentSession.value = finalSession
+                    repository.updateChatSession(finalSession)
                     _uiState.value = UiState.Success(cleanContent)
                 }
             } catch (e: Exception) {

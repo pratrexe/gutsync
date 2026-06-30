@@ -1,6 +1,6 @@
 package com.example.gutsync.data.storage
 
-import com.example.gutsync.data.ChatMessage
+import com.example.gutsync.data.ChatSession
 import com.example.gutsync.data.NutrientData
 import kotlinx.serialization.Serializable
 
@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
 data class AppData(
     val profile: UserProfile = UserProfile(),
     val meals: List<MealLogEntry> = emptyList(),
-    val chats: List<ChatMessage> = emptyList()
+    val chatSessions: List<ChatSession> = emptyList()
 )
 
 @Serializable

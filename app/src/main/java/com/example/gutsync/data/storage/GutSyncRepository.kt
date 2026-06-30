@@ -3,6 +3,7 @@ package com.example.gutsync.data.storage
 import android.content.Context
 import android.util.Log
 import com.example.gutsync.data.ChatMessage
+import com.example.gutsync.data.ChatSession
 import com.example.gutsync.data.NutrientData
 import com.example.gutsync.data.auth.AuthSession
 import com.example.gutsync.data.auth.SessionManager
@@ -27,6 +28,15 @@ class GutSyncRepository(private val context: Context) {
     private val sessionManager = SessionManager(context)
     private var driveHelper: DriveServiceHelper? = null
 
+    companion object {
+        private val json = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            coerceInputValues = true
+            encodeDefaults = true
+        }
+    }
+
     init {
         CoroutineScope(Dispatchers.IO).launch {
             loadData()
@@ -42,19 +52,20 @@ class GutSyncRepository(private val context: Context) {
             val session = sessionManager.getSession()
             if (session.isDriveConnected && driveHelper != null) {
                 val driveContent = Tasks.await(driveHelper!!.readFile(session.driveFileId!!))
-                _appData.value = Json.decodeFromString<AppData>(driveContent)
+                _appData.value = json.decodeFromString<AppData>(driveContent)
             } else if (localFile.exists()) {
                 val jsonStr = localFile.readText()
-                _appData.value = Json.decodeFromString<AppData>(jsonStr)
+                _appData.value = json.decodeFromString<AppData>(jsonStr)
             }
         } catch (e: Exception) {
+            Log.e("GutSyncAuth", "Error loading data: ${e.message}")
             e.printStackTrace()
         }
     }
 
     suspend fun saveData() = withContext(Dispatchers.IO) {
         try {
-            val jsonStr = Json.encodeToString(_appData.value)
+            val jsonStr = json.encodeToString(_appData.value)
             localFile.writeText(jsonStr)
 
             val session = sessionManager.getSession()
@@ -62,6 +73,7 @@ class GutSyncRepository(private val context: Context) {
                 Tasks.await(driveHelper!!.updateFile(session.driveFileId!!, jsonStr))
             }
         } catch (e: Exception) {
+            Log.e("GutSyncAuth", "Error saving data: ${e.message}")
             e.printStackTrace()
         }
     }
@@ -74,31 +86,19 @@ class GutSyncRepository(private val context: Context) {
         Log.d("GutSyncAuth", "Starting syncWithDrive process on IO thread...")
         
         try {
-            // 1. Search for GutSync folder
-            Log.d("GutSyncAuth", "Searching for GutSync folder...")
             var folderId = Tasks.await(helper.searchFile("GutSync"))
             if (folderId == null) {
-                Log.d("GutSyncAuth", "Folder not found. Creating GutSync folder...")
                 folderId = Tasks.await(helper.createFolder("GutSync"))
-                Log.d("GutSyncAuth", "Folder created with ID: $folderId")
-            } else {
-                Log.d("GutSyncAuth", "Found existing folder ID: $folderId")
             }
 
-            // 2. Search for data file in folder
-            Log.d("GutSyncAuth", "Searching for gutsync_data.json in folder...")
             var fileId = Tasks.await(helper.searchFileInFolder(folderId!!, "gutsync_data.json"))
             
             if (fileId == null) {
-                Log.d("GutSyncAuth", "File not found. Creating new data file...")
-                val jsonStr = Json.encodeToString(_appData.value)
+                val jsonStr = json.encodeToString(_appData.value)
                 fileId = Tasks.await(helper.createFileInFolder(folderId, "gutsync_data.json", jsonStr))
-                Log.d("GutSyncAuth", "File created with ID: $fileId")
             } else {
-                Log.d("GutSyncAuth", "Found existing file ID: $fileId. Loading content...")
                 val driveContent = Tasks.await(helper.readFile(fileId))
-                _appData.value = Json.decodeFromString<AppData>(driveContent)
-                Log.d("GutSyncAuth", "Data loaded from Drive successfully.")
+                _appData.value = json.decodeFromString<AppData>(driveContent)
             }
 
             val updatedSession = session.copy(
@@ -106,7 +106,6 @@ class GutSyncRepository(private val context: Context) {
                 driveFileId = fileId
             )
             sessionManager.saveSession(updatedSession)
-            Log.d("GutSyncAuth", "Session updated and saved with Drive IDs.")
             updatedSession
         } catch (e: Exception) {
             Log.e("GutSyncAuth", "FATAL ERROR during Drive Sync: ${e.message}")
@@ -122,10 +121,15 @@ class GutSyncRepository(private val context: Context) {
         saveData()
     }
 
-    suspend fun addChatMessage(message: ChatMessage) {
-        val currentChats = _appData.value.chats.toMutableList()
-        currentChats.add(message)
-        _appData.value = _appData.value.copy(chats = currentChats)
+    suspend fun updateChatSession(session: ChatSession) {
+        val currentSessions = _appData.value.chatSessions.toMutableList()
+        val index = currentSessions.indexOfFirst { it.id == session.id }
+        if (index != -1) {
+            currentSessions[index] = session
+        } else {
+            currentSessions.add(session)
+        }
+        _appData.value = _appData.value.copy(chatSessions = currentSessions)
         saveData()
     }
 

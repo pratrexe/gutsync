@@ -2,6 +2,8 @@ package com.example.gutsync.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,23 +11,20 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -33,13 +32,16 @@ import coil3.compose.rememberAsyncImagePainter
 import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.UiState
 import com.example.gutsync.data.ChatMessage
+import com.example.gutsync.data.ChatSession
 import com.example.gutsync.data.MessageRole
-import com.example.gutsync.ui.theme.SurfaceContainerLow
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
     var question by remember { mutableStateOf("") }
-    val currentChat by viewModel.currentChat.collectAsState()
+    val currentSession by viewModel.currentSession.collectAsState()
     val chatHistory by viewModel.chatHistory.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
@@ -47,9 +49,9 @@ fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
     var showHistory by remember { mutableStateOf(false) }
 
     // Auto-scroll to bottom when new messages arrive
-    LaunchedEffect(currentChat.size) {
-        if (currentChat.isNotEmpty()) {
-            listState.animateScrollToItem(currentChat.size - 1)
+    LaunchedEffect(currentSession.messages.size) {
+        if (currentSession.messages.isNotEmpty()) {
+            listState.animateScrollToItem(currentSession.messages.size - 1)
         }
     }
 
@@ -70,10 +72,12 @@ fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
                     Text(
-                        text = "New Session",
+                        text = currentSession.summary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                         color = Color.White,
-                        fontSize = 14.sp
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -84,10 +88,10 @@ fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 100.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (currentChat.isEmpty() && uiState is UiState.Initial) {
+                if (currentSession.messages.isEmpty() && uiState is UiState.Initial) {
                     item {
                         Text(
                             text = "Ask Cooper anything about your microbiome. Example: 'How does spinach affect Akkermansia?'",
@@ -98,7 +102,7 @@ fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
                     }
                 }
 
-                items(currentChat) { message ->
+                items(currentSession.messages) { message ->
                     ChatBubble(message)
                 }
                 
@@ -122,14 +126,14 @@ fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
             )
         }
 
-        // Floating Control Bar (History & New Chat)
+        // Floating Control Bar (Top Left)
         Surface(
-            color = Color.Black, // Fully opaque black
+            color = Color.Black,
             shape = RoundedCornerShape(24.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
             modifier = Modifier
-                .align(Alignment.TopStart) // Move to Top Left
-                .padding(top = 16.dp, start = 16.dp) // Adjusted padding
+                .align(Alignment.TopStart)
+                .padding(top = 16.dp, start = 16.dp)
                 .width(100.dp)
         ) {
             Row(
@@ -159,7 +163,7 @@ fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Chat History", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Conversation Highlights", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         IconButton(onClick = { showHistory = false }) {
                             Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                         }
@@ -168,32 +172,57 @@ fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(chatHistory.reversed()) { msg ->
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(
-                                        text = if (msg.role == MessageRole.USER) "You" else "Cooper",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (msg.role == MessageRole.USER) Color(0xFFD1C4E9) else Color.White
-                                    )
-                                    Text(
-                                        text = msg.text,
-                                        fontSize = 14.sp,
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        maxLines = 2,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
-                                }
+                        items(chatHistory.sortedByDescending { it.lastUpdated }) { session ->
+                            ChatSessionHighlightCard(session) {
+                                viewModel.openSession(session)
+                                showHistory = false
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun ChatSessionHighlightCard(session: ChatSession, onClick: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = session.summary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(session.lastUpdated)),
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            val lastMsg = session.messages.lastOrNull()?.text ?: "No messages"
+            Text(
+                text = lastMsg,
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.6f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -206,7 +235,6 @@ fun ChatBubble(message: ChatMessage) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        // Role Header (Avatar + Name)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -225,20 +253,11 @@ fun ChatBubble(message: ChatMessage) {
                 Text(text = "Cooper", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             } else {
                 Text(text = "Me", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Image(
-                    painter = rememberAsyncImagePainter("https://lh3.googleusercontent.com/a/default-user"),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
             }
         }
 
-        // Bubble
         Surface(
-            color = if (isUser) Color(0xFFD1C4E9) else Color.White, // Light purple for user, white for Cooper
+            color = if (isUser) Color(0xFFD1C4E9) else Color.White,
             shape = RoundedCornerShape(
                 topStart = 16.dp,
                 topEnd = 16.dp,
@@ -255,14 +274,6 @@ fun ChatBubble(message: ChatMessage) {
                 lineHeight = 20.sp
             )
         }
-        
-        // Timestamp
-        Text(
-            text = message.timestamp,
-            color = Color.Gray,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 4.dp, start = if (isUser) 0.dp else 4.dp, end = if (isUser) 4.dp else 0.dp)
-        )
     }
 }
 
@@ -302,11 +313,10 @@ fun ChatInputArea(value: String, onValueChange: (String) -> Unit, onSend: () -> 
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp)
-            .padding(bottom = 80.dp), // Extra space for nav bar
+            .padding(bottom = 80.dp),
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Text Input
         Surface(
             color = Color.White,
             shape = RoundedCornerShape(30.dp),
@@ -331,12 +341,10 @@ fun ChatInputArea(value: String, onValueChange: (String) -> Unit, onSend: () -> 
             )
         }
 
-        // Action Menu (Floating style)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Send Button
             FloatingActionButton(
                 onClick = onSend,
                 containerColor = Color(0xFFD1C4E9),
