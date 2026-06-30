@@ -1,5 +1,7 @@
 package com.example.gutsync.data
 
+import kotlinx.serialization.Serializable
+
 enum class MicrobeType(val displayName: String) {
     BIFIDOBACTERIUM("Bifidobacterium"),
     LACTOBACILLUS("Lactobacillus"),
@@ -7,7 +9,10 @@ enum class MicrobeType(val displayName: String) {
     BACTEROIDES("Bacteroides")
 }
 
+@Serializable
 data class NutrientData(
+    val foodName: String = "",
+    val calories: Int = 0,
     val fiber: Float = 0f, // in grams
     val saturatedFats: Float = 0f, // in grams
     val refinedSugars: Float = 0f, // in grams

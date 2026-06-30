@@ -32,6 +32,7 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version = "3.1.0" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version = "3.1.0" }
 firebase-ai = { group = "com.google.firebase", name = "firebase-ai", version.ref = "firebaseAi" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.8.0" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

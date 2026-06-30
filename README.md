@@ -4,8 +4,9 @@ GutSync is a minimalist, high-performance mobile health application designed to 
 
 ## 🌟 Key Features
 
-- **Microbe Impact Score**: A proprietary algorithm that calculates the impact of every meal on the top 4 microbial families: *Bifidobacterium*, *Lactobacillus*, *Akkermansia*, and *Bacteroides*.
-- **Gemini-Powered Insights**: Integrated AI for generating personalized microbiome health reports and answering complex questions about food-gut interactions.
+- **AI-Powered Meal Analysis**: Uses Gemini 2.5 Flash to extract nutritional components (Fiber, Polyphenols, etc.) from natural language meal descriptions.
+- **Microbe Impact Score**: A proprietary algorithm that calculates the impact of every meal based on AI-analyzed data.
+- **Ask Gemini**: A dedicated tab for direct interaction with an AI microbiome expert.
 - **Biotic Density Tracking**: Visualizes the concentration of fibers, polyphenols, and fermented cultures in your diet.
 - **Longitudinal Trends**: Track shifts in your gut's "Pro-inflammatory" vs "Anti-inflammatory" states over weeks and months.
 - **Gut-Bites Library**: A curated collection of bite-sized educational modules explaining the science of the second brain.
@@ -49,7 +50,7 @@ GutSync tracks specific "Microbiome-Active" compounds:
 - `com.example.gutsync.data`: Contains the `MicrobeImpactCalculator` and data models.
 - `com.example.gutsync.ui.screens`: Jetpack Compose screens (Dashboard, Log, Trends, Insights).
 - `com.example.gutsync.ui.theme`: Custom Material 3 theme with a high-contrast dark aesthetic.
-- `com.example.gutsync.BakingViewModel.kt`: renamed to `GutSyncViewModel`, handles state and AI interaction.
+- `com.example.gutsync.GutSyncViewModel.kt`: Handles state and AI interaction.
 
 ## 📝 License
 

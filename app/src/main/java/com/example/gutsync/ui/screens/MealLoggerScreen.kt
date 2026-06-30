@@ -11,7 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,13 +20,21 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.alpha
 import coil3.compose.AsyncImage
+import com.example.gutsync.GutSyncViewModel
+import com.example.gutsync.UiState
+import com.example.gutsync.data.MicrobeImpactCalculator
+import com.example.gutsync.data.NutrientData
 import com.example.gutsync.ui.theme.SurfaceContainerLow
+import androidx.compose.ui.draw.alpha
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
-fun MealLoggerScreen() {
+fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
+    var searchQuery by remember { mutableStateOf("") }
+    val analyzedFood by viewModel.analyzedFood.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -40,16 +48,16 @@ fun MealLoggerScreen() {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "LOG NUTRITION",
+                    text = "LOG NUTRITION (AI ANALYZED)",
                     fontSize = 12.sp,
                     letterSpacing = 2.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
                 )
                 OutlinedTextField(
-                    value = "",
-                    onValueChange = {},
-                    placeholder = { Text("Log your meal...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Describe your meal...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(64.dp),
@@ -60,7 +68,16 @@ fun MealLoggerScreen() {
                         unfocusedBorderColor = Color(0xFF2C2C2E),
                         focusedBorderColor = Color.White
                     ),
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    trailingIcon = {
+                        if (uiState is UiState.Loading) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            TextButton(onClick = { viewModel.analyzeFood(searchQuery) }) {
+                                Text("Analyze", color = Color.White)
+                            }
+                        }
+                    }
                 )
             }
         }
@@ -68,8 +85,8 @@ fun MealLoggerScreen() {
         // Score & Details Bento
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                ImpactScoreCard(modifier = Modifier.weight(1f))
-                BioticDensityCard(modifier = Modifier.weight(1f))
+                ImpactScoreCard(analyzedFood, modifier = Modifier.weight(1f))
+                BioticDensityCard(analyzedFood, modifier = Modifier.weight(1f))
             }
         }
 
@@ -108,7 +125,15 @@ fun MealLoggerScreen() {
 }
 
 @Composable
-fun ImpactScoreCard(modifier: Modifier = Modifier) {
+fun ImpactScoreCard(nutrients: NutrientData?, modifier: Modifier = Modifier) {
+    val impact = nutrients?.let { MicrobeImpactCalculator.calculateImpact(it) }
+    val score = impact?.first ?: 0
+    val shiftText = if (nutrients != null) {
+        "This meal promotes beneficial microbes and improves gut integrity."
+    } else {
+        "Analyze a meal to see its microbial impact."
+    }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceContainerLow),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2C2C2E)),
@@ -123,11 +148,11 @@ fun ImpactScoreCard(modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(text = "94", fontSize = 48.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(text = score.toString(), fontSize = 48.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 Text(text = "/100", fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
             }
             Text(
-                text = "This meal promotes Akkermansia and increases gut lining integrity.",
+                text = shiftText,
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 20.sp
@@ -137,7 +162,7 @@ fun ImpactScoreCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun BioticDensityCard(modifier: Modifier = Modifier) {
+fun BioticDensityCard(nutrients: NutrientData?, modifier: Modifier = Modifier) {
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceContainerLow),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2C2C2E)),
@@ -152,9 +177,9 @@ fun BioticDensityCard(modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(12.dp))
-            BioticRow("Fiber", "12g")
-            BioticRow("Polyphenols", "450mg")
-            BioticRow("Fermented", "3 Active")
+            BioticRow("Fiber", "${nutrients?.fiber ?: 0}g")
+            BioticRow("Polyphenols", "${nutrients?.polyphenols ?: 0}mg")
+            BioticRow("Fermented", "${nutrients?.fermentedCultures ?: 0} Active")
         }
     }
 }
@@ -164,7 +189,7 @@ fun BioticRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = label, fontSize = 14.sp, color = Color.White)
@@ -206,4 +231,3 @@ val recentItems = listOf(
     RecentItem("Greek Yogurt", "Logged 8h ago", 120),
     RecentItem("Kombucha (Raw)", "Logged Yesterday", 30, faded = true)
 )
-

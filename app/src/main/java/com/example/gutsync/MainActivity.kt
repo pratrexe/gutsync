@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
@@ -16,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.example.gutsync.ui.screens.AskGeminiScreen
 import com.example.gutsync.ui.screens.DashboardScreen
 import com.example.gutsync.ui.screens.InsightsScreen
 import com.example.gutsync.ui.screens.MealLoggerScreen
@@ -41,6 +43,7 @@ fun MainNavigation() {
         NavigationItem("Log", Icons.Default.AddCircle),
         NavigationItem("Trends", Icons.Default.BarChart),
         NavigationItem("Guide", Icons.AutoMirrored.Filled.MenuBook),
+        NavigationItem("AI", Icons.Default.AutoAwesome)
     )
 
     Scaffold(
@@ -77,6 +80,7 @@ fun MainNavigation() {
                 1 -> MealLoggerScreen()
                 2 -> TrendsScreen()
                 3 -> InsightsScreen()
+                4 -> AskGeminiScreen()
             }
         }
     }
