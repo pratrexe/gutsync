@@ -1,6 +1,7 @@
 package com.example.gutsync.ui.screens
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -55,13 +56,21 @@ fun SettingsScreen(
                         .border(2.dp, Color.White.copy(alpha = 0.2f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Placeholder for PFP (could add real Google PFP URL if available in AuthSession)
-                    Icon(
-                        Icons.Default.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(60.dp),
-                        tint = Color.White
-                    )
+                    if (session.photoUrl != null) {
+                        Image(
+                            painter = rememberAsyncImagePainter(session.photoUrl),
+                            contentDescription = "Profile Picture",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(60.dp),
+                            tint = Color.White
+                        )
+                    }
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))

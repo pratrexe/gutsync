@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -76,8 +77,9 @@ class MainActivity : ComponentActivity() {
                         viewModel.syncWithDrive(this@MainActivity, account) { newSession, error ->
                             if (newSession != null) {
                                 Log.d("GutSyncAuth", "Drive Sync Complete. Session status: ${newSession.isLoggedIn}")
-                                sessionManager.saveSession(newSession)
-                                currentSession = newSession
+                                val sessionWithPhoto = newSession.copy(photoUrl = account.photoUrl?.toString())
+                                sessionManager.saveSession(sessionWithPhoto)
+                                currentSession = sessionWithPhoto
                             } else {
                                 scope.launch {
                                     snackbarHostState.showSnackbar("Drive Sync Failed: $error")
@@ -181,8 +183,8 @@ fun MainNavigation(
         NavigationItem("Home", Icons.Default.Home),
         NavigationItem("Log", Icons.Default.AddCircle),
         NavigationItem("Trends", Icons.Default.BarChart),
-        NavigationItem("Guide", Icons.AutoMirrored.Filled.MenuBook),
-        NavigationItem("AI", Icons.Default.AutoAwesome)
+        NavigationItem("AI", Icons.Default.AutoAwesome),
+        NavigationItem("Settings", Icons.Default.Settings)
     )
 
     // Scroll state for hiding navigation
@@ -221,15 +223,16 @@ fun MainNavigation(
             ) {
                 when (selectedTab) {
                     0 -> DashboardScreen(
-                        session = session,
-                        onConnectDrive = onConnectDrive,
-                        onSignOut = onSignOut,
                         viewModel = viewModel
                     )
                     1 -> MealLoggerScreen(viewModel = viewModel)
                     2 -> TrendsScreen(viewModel = viewModel)
-                    3 -> InsightsScreen()
-                    4 -> AskGeminiScreen(viewModel = viewModel)
+                    3 -> AskGeminiScreen(viewModel = viewModel)
+                    4 -> SettingsScreen(
+                        session = session,
+                        onConnectDrive = onConnectDrive,
+                        onSignOut = onSignOut
+                    )
                 }
             }
         }

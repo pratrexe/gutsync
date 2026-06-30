@@ -139,6 +139,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                     isLoggedIn = true,
                     displayName = account.displayName ?: "User",
                     email = account.email,
+                    photoUrl = account.photoUrl?.toString(),
                     accountType = com.example.gutsync.data.auth.AccountType.GOOGLE
                 )
                 com.example.gutsync.data.auth.SessionManager(context).saveSession(finalSession)
