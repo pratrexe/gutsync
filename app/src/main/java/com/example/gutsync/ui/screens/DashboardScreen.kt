@@ -28,7 +28,6 @@ fun DashboardScreen() {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
             .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(24.dp)

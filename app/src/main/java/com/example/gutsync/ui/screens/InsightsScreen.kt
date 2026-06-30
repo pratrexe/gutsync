@@ -31,7 +31,6 @@ fun InsightsScreen() {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {

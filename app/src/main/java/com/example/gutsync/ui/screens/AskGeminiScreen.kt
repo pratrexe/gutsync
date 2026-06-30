@@ -51,7 +51,6 @@ fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
     ) {
         // Header
         Column(
