@@ -2,6 +2,7 @@ package com.example.gutsync
 
 import android.app.Application
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gutsync.data.ChatMessage
@@ -14,6 +15,8 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.Schema
+import com.google.firebase.ai.type.Tool
+import com.google.firebase.ai.type.content
 import com.google.firebase.ai.type.generationConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -33,17 +36,23 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
     private val _analyzedFood: MutableStateFlow<NutrientData?> = MutableStateFlow(null)
     val analyzedFood: StateFlow<NutrientData?> = _analyzedFood.asStateFlow()
 
+    private val _capturedImage = MutableStateFlow<Bitmap?>(null)
+    val capturedImage: StateFlow<Bitmap?> = _capturedImage.asStateFlow()
+
+    private val _currentChat = MutableStateFlow<List<ChatMessage>>(emptyList())
+    val currentChat: StateFlow<List<ChatMessage>> = _currentChat.asStateFlow()
+
     val chatHistory: StateFlow<List<ChatMessage>> = repository.appData
         .map { it.chats }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private val generativeModel = Firebase.ai.generativeModel(
-        modelName = "gemini-2.5-flash",
+        modelName = "gemini-2.0-flash",
         generationConfig = generationConfig {
             responseMimeType = "application/json"
             responseSchema = Schema.obj(
                 mapOf(
-                    "foodName" to Schema.string("Name of the food"),
+                    "foodName" to Schema.string("Name of the food identified"),
                     "calories" to Schema.integer("Total calories"),
                     "fiber" to Schema.double("Fiber in grams"),
                     "saturatedFats" to Schema.double("Saturated fats in grams"),
@@ -56,17 +65,39 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         }
     )
 
-    fun analyzeFood(description: String) {
+    fun setCapturedImage(bitmap: Bitmap?) {
+        _capturedImage.value = bitmap
+        _analyzedFood.value = null
+    }
+
+    fun startNewChat() {
+        _currentChat.value = emptyList()
+        _uiState.value = UiState.Initial
+    }
+
+    fun analyzeFood(description: String, bitmap: Bitmap? = null) {
         _uiState.value = UiState.Loading
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val prompt = """
-                    Analyze the following food description and provide its nutritional components.
-                    If the description is vague, provide estimates for a standard serving.
-                    Description: $description
+                    Analyze this food and provide its nutritional components. 
+                    Identify exactly what is in the food. 
+                    Check scientific data to provide accurate microbiome-active components.
+                    If the description is vague, use the image to identify ingredients.
+                    Description/Context: $description
                 """.trimIndent()
                 
-                val response = generativeModel.generateContent(prompt)
+                val response = if (bitmap != null) {
+                    generativeModel.generateContent(
+                        content {
+                            image(bitmap)
+                            text(prompt)
+                        }
+                    )
+                } else {
+                    generativeModel.generateContent(prompt)
+                }
+
                 response.text?.let { jsonString ->
                     val json = JSONObject(jsonString)
                     val nutrientData = NutrientData(
@@ -93,17 +124,21 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
             viewModelScope.launch {
                 repository.addMeal(nutrients)
                 _analyzedFood.value = null
+                _capturedImage.value = null
             }
         }
     }
 
     fun askFoodQuestion(question: String) {
+        val userMsg = ChatMessage(question, MessageRole.USER)
+        _currentChat.value = _currentChat.value + userMsg
+        
         viewModelScope.launch {
-            repository.addChatMessage(ChatMessage(question, MessageRole.USER))
+            repository.addChatMessage(userMsg)
         }
         
         _uiState.value = UiState.Loading
-        val chatModel = Firebase.ai.generativeModel(modelName = "gemini-2.5-flash")
+        val chatModel = Firebase.ai.generativeModel(modelName = "gemini-2.0-flash")
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -119,8 +154,11 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                         .replace("*", "")
                         .replace("#", "")
                     
+                    val modelMsg = ChatMessage(cleanContent, MessageRole.MODEL)
+                    _currentChat.value = _currentChat.value + modelMsg
+                    
                     viewModelScope.launch {
-                        repository.addChatMessage(ChatMessage(cleanContent, MessageRole.MODEL))
+                        repository.addChatMessage(modelMsg)
                     }
                     _uiState.value = UiState.Success(cleanContent)
                 }
@@ -150,6 +188,4 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
-
-
 }

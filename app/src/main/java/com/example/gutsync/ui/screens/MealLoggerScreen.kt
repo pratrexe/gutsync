@@ -1,7 +1,13 @@
 package com.example.gutsync.ui.screens
 
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.launch
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,13 +15,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,7 +35,6 @@ import com.example.gutsync.UiState
 import com.example.gutsync.data.MicrobeImpactCalculator
 import com.example.gutsync.data.NutrientData
 import com.example.gutsync.ui.theme.SurfaceContainerLow
-import androidx.compose.ui.draw.alpha
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
@@ -34,6 +42,15 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
     var searchQuery by remember { mutableStateOf("") }
     val analyzedFood by viewModel.analyzedFood.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    val capturedImage by viewModel.capturedImage.collectAsState()
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.setCapturedImage(bitmap)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -56,7 +73,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Describe your meal...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    placeholder = { Text("Describe or capture your meal...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(64.dp),
@@ -81,7 +98,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                                     Text("Confirm")
                                 }
                             } else {
-                                TextButton(onClick = { viewModel.analyzeFood(searchQuery); searchQuery = "" }) {
+                                TextButton(onClick = { viewModel.analyzeFood(searchQuery, capturedImage); searchQuery = "" }) {
                                     Text("Analyze", color = Color.White)
                                 }
                             }
@@ -99,18 +116,62 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
             }
         }
 
-        // Image Spotlight
+        // Image Spotlight (Now with Camera Action)
         item {
-            AsyncImage(
-                model = "https://lh3.googleusercontent.com/aida-public/AB6AXuCm3Oxk5WmVwaNJt4XAeDa5EF_ok_mENmScVvQm_eD8U2zMmWvmuu7w85Ev2uRQgjy0fvljSY6QWix_fTI_Hn6HW6TkuIw2sSRR6R3VtBvzc0U3LAp3EW2TBIUQadFQRSuhkaLHffMZE4I8x7CCYoq2ugMJhrmpbyJXVWPQk5a493QL0NVxbjmbN7pM4SdnVjW1R2NWW1GtYu6o5CwaSckXLxcsoOcdSNSDGTt1Jq32mamX8LLR_2fOYrF946PtY6ytk1XdzxskEVAG",
-                contentDescription = "Meal Image",
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .border(1.dp, Color(0xFF2C2C2E), RoundedCornerShape(16.dp)),
-                contentScale = ContentScale.Crop
-            )
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(SurfaceContainerLow)
+                    .border(1.dp, Color(0xFF2C2C2E), RoundedCornerShape(24.dp))
+                    .clickable { cameraLauncher.launch() },
+                contentAlignment = Alignment.Center
+            ) {
+                if (capturedImage != null) {
+                    Image(
+                        bitmap = capturedImage!!.asImageBitmap(),
+                        contentDescription = "Captured Meal",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    // Overlay to retake
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.BottomEnd
+                    ) {
+                        Surface(
+                            modifier = Modifier.padding(16.dp),
+                            color = Color.Black.copy(alpha = 0.6f),
+                            shape = CircleShape
+                        ) {
+                            Icon(
+                                Icons.Default.CameraAlt,
+                                contentDescription = "Retake",
+                                tint = Color.White,
+                                modifier = Modifier.padding(8.dp).size(20.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.CameraAlt,
+                            contentDescription = "Capture Food",
+                            tint = Color.White,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Tap to Capture Meal",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
         }
 
         // Recent Items
@@ -140,7 +201,7 @@ fun ImpactScoreCard(nutrients: NutrientData?, modifier: Modifier = Modifier) {
     val shiftText = if (nutrients != null) {
         "This meal promotes beneficial microbes and improves gut integrity."
     } else {
-        "Analyze a meal to see its microbial impact."
+        "Capture or describe a meal to see its microbial impact."
     }
 
     Card(

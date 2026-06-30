@@ -14,6 +14,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,73 +39,162 @@ import com.example.gutsync.ui.theme.SurfaceContainerLow
 @Composable
 fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
     var question by remember { mutableStateOf("") }
+    val currentChat by viewModel.currentChat.collectAsState()
     val chatHistory by viewModel.chatHistory.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+    
+    var showHistory by remember { mutableStateOf(false) }
 
     // Auto-scroll to bottom when new messages arrive
-    LaunchedEffect(chatHistory.size) {
-        if (chatHistory.isNotEmpty()) {
-            listState.animateScrollToItem(chatHistory.size - 1)
+    LaunchedEffect(currentChat.size) {
+        if (currentChat.isNotEmpty()) {
+            listState.animateScrollToItem(currentChat.size - 1)
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-    ) {
-        // Header
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.fillMaxSize()
         ) {
-            Surface(
-                color = Color.White.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(20.dp),
-                modifier = Modifier.padding(bottom = 8.dp)
+            // Header
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "Today",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    color = Color.White,
-                    fontSize = 14.sp
-                )
+                Surface(
+                    color = Color.White.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(
+                        text = "New Session",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                }
             }
+
+            // Chat List
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (currentChat.isEmpty() && uiState is UiState.Initial) {
+                    item {
+                        Text(
+                            text = "Ask Cooper anything about your microbiome. Example: 'How does spinach affect Akkermansia?'",
+                            color = Color.Gray,
+                            fontSize = 16.sp,
+                            modifier = Modifier.padding(20.dp)
+                        )
+                    }
+                }
+
+                items(currentChat) { message ->
+                    ChatBubble(message)
+                }
+                
+                if (uiState is UiState.Loading) {
+                    item {
+                        LoadingBubble()
+                    }
+                }
+            }
+
+            // Input Area
+            ChatInputArea(
+                value = question,
+                onValueChange = { question = it },
+                onSend = {
+                    if (question.isNotBlank()) {
+                        viewModel.askFoodQuestion(question)
+                        question = ""
+                    }
+                }
+            )
         }
 
-        // Chat List
-        LazyColumn(
-            state = listState,
+        // Floating Control Bar (History & New Chat)
+        Surface(
+            color = Color.Black, // Fully opaque black
+            shape = RoundedCornerShape(24.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .align(Alignment.TopStart) // Move to Top Left
+                .padding(top = 16.dp, start = 16.dp) // Adjusted padding
+                .width(100.dp)
         ) {
-            items(chatHistory) { message ->
-                ChatBubble(message)
-            }
-            
-            if (uiState is UiState.Loading) {
-                item {
-                    LoadingBubble()
+            Row(
+                modifier = Modifier.padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { showHistory = !showHistory }) {
+                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History", tint = Color.White)
+                }
+                VerticalDivider(color = Color.White.copy(alpha = 0.2f), modifier = Modifier.height(24.dp))
+                IconButton(onClick = { viewModel.startNewChat() }) {
+                    Icon(Icons.Default.Add, contentDescription = "New Chat", tint = Color.White)
                 }
             }
         }
 
-        // Input Area
-        ChatInputArea(
-            value = question,
-            onValueChange = { question = it },
-            onSend = {
-                if (question.isNotBlank()) {
-                    viewModel.askFoodQuestion(question)
-                    question = ""
+        // History Drawer/Overlay
+        if (showHistory) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.95f),
+                modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Chat History", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        IconButton(onClick = { showHistory = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(chatHistory.reversed()) { msg ->
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = if (msg.role == MessageRole.USER) "You" else "Cooper",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (msg.role == MessageRole.USER) Color(0xFFD1C4E9) else Color.White
+                                    )
+                                    Text(
+                                        text = msg.text,
+                                        fontSize = 14.sp,
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        maxLines = 2,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 }
 
