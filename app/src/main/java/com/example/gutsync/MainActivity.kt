@@ -36,6 +36,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,29 +70,64 @@ fun MainNavigation() {
         NavigationItem("AI", Icons.Default.AutoAwesome)
     )
 
-    Scaffold(
-        containerColor = Color.Transparent,
-        bottomBar = {
+    // Scroll state for hiding navigation
+    var navVisible by remember { mutableStateOf(true) }
+    val navOffset by animateFloatAsState(
+        targetValue = if (navVisible) 0f else 300f, // Increased offset for complete hiding
+        label = "nav_offset"
+    )
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -15) { // Scrolling down
+                    if (navVisible) navVisible = false
+                } else if (available.y > 15) { // Scrolling up
+                    if (!navVisible) navVisible = true
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(nestedScrollConnection)
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent
+        ) { innerPadding ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                color = Color.Transparent
+            ) {
+                when (selectedTab) {
+                    0 -> DashboardScreen()
+                    1 -> MealLoggerScreen()
+                    2 -> TrendsScreen()
+                    3 -> InsightsScreen()
+                    4 -> AskGeminiScreen()
+                }
+            }
+        }
+
+        // Place Dynamic Island directly in the root Box
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .offset { IntOffset(0, navOffset.roundToInt()) }
+                .padding(bottom = 32.dp),
+            contentAlignment = Alignment.Center
+        ) {
             DynamicIslandNav(
                 tabs = tabs,
                 selectedTab = selectedTab,
                 onTabSelected = { selectedTab = it }
             )
-        }
-    ) { innerPadding ->
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            color = Color.Transparent
-        ) {
-            when (selectedTab) {
-                0 -> DashboardScreen()
-                1 -> MealLoggerScreen()
-                2 -> TrendsScreen()
-                3 -> InsightsScreen()
-                4 -> AskGeminiScreen()
-            }
         }
     }
 }
@@ -94,18 +138,24 @@ fun DynamicIslandNav(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
+    // Dynamic Island Container
     Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        contentAlignment = Alignment.Center
+            .height(64.dp)
+            .widthIn(max = 350.dp)
+            .clip(CircleShape)
     ) {
-        // Frosted Glass Effect
-        Surface(
+        // 1. Background Layer with Blur (Separate from Content to keep icons sharp)
+        Box(
             modifier = Modifier
-                .height(64.dp)
-                .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.6f)),
+                .fillMaxSize()
+                .blur(20.dp)
+                .background(Color.Black.copy(alpha = 0.4f))
+        )
+
+        // 2. Content Layer (Border and Icons)
+        Surface(
+            modifier = Modifier.fillMaxSize(),
             color = Color.Transparent,
             border = BorderStroke(
                 width = 1.dp,
@@ -115,7 +165,8 @@ fun DynamicIslandNav(
                         Color.Transparent
                     )
                 )
-            )
+            ),
+            shape = CircleShape
         ) {
             Row(
                 modifier = Modifier
@@ -154,6 +205,8 @@ fun DynamicIslandNav(
         }
     }
 }
+
+
 
 
 data class NavigationItem(val label: String, val icon: ImageVector)
