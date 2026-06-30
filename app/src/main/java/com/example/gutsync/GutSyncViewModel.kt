@@ -130,12 +130,11 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun syncWithDrive(context: Context, account: GoogleSignInAccount, onComplete: (AuthSession) -> Unit) {
+    fun syncWithDrive(context: Context, account: GoogleSignInAccount, onComplete: (AuthSession?, String?) -> Unit) {
         viewModelScope.launch {
             try {
                 val drive = com.example.gutsync.data.auth.GoogleAuthHelper.getDriveService(context, account)
                 val newSession = repository.syncWithDrive(drive)
-                // Also update session with account info
                 val finalSession = newSession.copy(
                     isLoggedIn = true,
                     displayName = account.displayName ?: "User",
@@ -143,13 +142,13 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                     accountType = com.example.gutsync.data.auth.AccountType.GOOGLE
                 )
                 com.example.gutsync.data.auth.SessionManager(context).saveSession(finalSession)
-                onComplete(finalSession)
+                onComplete(finalSession, null)
             } catch (e: Exception) {
                 e.printStackTrace()
-                // Return original session on failure so UI doesn't hang
-                onComplete(com.example.gutsync.data.auth.SessionManager(context).getSession())
+                onComplete(null, e.localizedMessage ?: "Drive synchronization failed")
             }
         }
     }
+
 
 }

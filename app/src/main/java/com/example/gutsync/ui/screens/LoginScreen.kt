@@ -17,11 +17,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.runtime.*
+
 @Composable
 fun LoginScreen(
     onSignInWithGoogle: () -> Unit,
-    onContinueOffline: () -> Unit
+    onContinueOffline: (String) -> Unit
 ) {
+    var showOfflineSignUp by remember { mutableStateOf(false) }
+    var offlineName by remember { mutableStateOf("") }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -32,7 +37,7 @@ fun LoginScreen(
         // App Logo/Title Section
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(bottom = 64.dp)
+            modifier = Modifier.padding(bottom = 48.dp)
         ) {
             Surface(
                 modifier = Modifier.size(80.dp),
@@ -60,7 +65,7 @@ fun LoginScreen(
             )
         }
 
-        // Login Options Card
+        // Login/Signup Options Card
         Card(
             colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
             shape = RoundedCornerShape(24.dp),
@@ -70,53 +75,95 @@ fun LoginScreen(
                 modifier = Modifier.padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Welcome to your second brain.",
-                    fontSize = 18.sp,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                )
+                if (!showOfflineSignUp) {
+                    Text(
+                        text = "Connect your second brain.",
+                        fontSize = 18.sp,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
 
-                Button(
-                    onClick = onSignInWithGoogle,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = Color.Black
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.AccountCircle, contentDescription = null)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = "Connect with Google", fontWeight = FontWeight.Bold)
-                }
+                    Button(
+                        onClick = onSignInWithGoogle,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.AccountCircle, contentDescription = null)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(text = "Sign in with Google", fontWeight = FontWeight.Bold)
+                    }
 
-                OutlinedButton(
-                    onClick = onContinueOffline,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
-                ) {
-                    Icon(Icons.Default.Language, contentDescription = null)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = "Continue Offline", fontWeight = FontWeight.Medium)
+                    OutlinedButton(
+                        onClick = { showOfflineSignUp = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Icon(Icons.Default.Language, contentDescription = null)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(text = "New Offline Account", fontWeight = FontWeight.Medium)
+                    }
+                    
+                    TextButton(
+                        onClick = { onContinueOffline("Guest") },
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Text("Already have a local account? Enter", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    // Offline Sign-Up Form
+                    Text(
+                        text = "Personalize your journey.",
+                        fontSize = 18.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    
+                    OutlinedTextField(
+                        value = offlineName,
+                        onValueChange = { offlineName = it },
+                        label = { Text("What's your name?", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+
+                    Button(
+                        onClick = { if (offlineName.isNotBlank()) onContinueOffline(offlineName) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = offlineName.isNotBlank()
+                    ) {
+                        Text(text = "Create Account", fontWeight = FontWeight.Bold)
+                    }
+
+                    TextButton(onClick = { showOfflineSignUp = false }) {
+                        Text("Back to Google Sign In", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                
-                Text(
-                    text = "Storing your data in Google Drive ensures your microbiome history is always yours.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
             }
         }
     }

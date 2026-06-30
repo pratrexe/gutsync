@@ -1,6 +1,7 @@
 package com.example.gutsync.data.storage
 
 import android.content.Context
+import android.util.Log
 import com.example.gutsync.data.ChatMessage
 import com.example.gutsync.data.NutrientData
 import com.example.gutsync.data.auth.AuthSession
@@ -65,32 +66,53 @@ class GutSyncRepository(private val context: Context) {
         }
     }
 
-    suspend fun syncWithDrive(drive: Drive): AuthSession {
+    suspend fun syncWithDrive(drive: Drive): AuthSession = withContext(Dispatchers.IO) {
         val helper = DriveServiceHelper(drive)
         driveHelper = helper
         val session = sessionManager.getSession()
         
-        var folderId = Tasks.await(helper.searchFile("GutSync"))
-        if (folderId == null) {
-            folderId = Tasks.await(helper.createFolder("GutSync"))
-        }
-
-        var fileId = Tasks.await(helper.searchFileInFolder(folderId!!, "gutsync_data.json"))
+        Log.d("GutSyncAuth", "Starting syncWithDrive process on IO thread...")
         
-        if (fileId == null) {
-            val jsonStr = Json.encodeToString(_appData.value)
-            fileId = Tasks.await(helper.createFileInFolder(folderId, "gutsync_data.json", jsonStr))
-        } else {
-            val driveContent = Tasks.await(helper.readFile(fileId))
-            _appData.value = Json.decodeFromString<AppData>(driveContent)
-        }
+        try {
+            // 1. Search for GutSync folder
+            Log.d("GutSyncAuth", "Searching for GutSync folder...")
+            var folderId = Tasks.await(helper.searchFile("GutSync"))
+            if (folderId == null) {
+                Log.d("GutSyncAuth", "Folder not found. Creating GutSync folder...")
+                folderId = Tasks.await(helper.createFolder("GutSync"))
+                Log.d("GutSyncAuth", "Folder created with ID: $folderId")
+            } else {
+                Log.d("GutSyncAuth", "Found existing folder ID: $folderId")
+            }
 
-        val updatedSession = session.copy(
-            driveFolderId = folderId,
-            driveFileId = fileId
-        )
-        sessionManager.saveSession(updatedSession)
-        return updatedSession
+            // 2. Search for data file in folder
+            Log.d("GutSyncAuth", "Searching for gutsync_data.json in folder...")
+            var fileId = Tasks.await(helper.searchFileInFolder(folderId!!, "gutsync_data.json"))
+            
+            if (fileId == null) {
+                Log.d("GutSyncAuth", "File not found. Creating new data file...")
+                val jsonStr = Json.encodeToString(_appData.value)
+                fileId = Tasks.await(helper.createFileInFolder(folderId, "gutsync_data.json", jsonStr))
+                Log.d("GutSyncAuth", "File created with ID: $fileId")
+            } else {
+                Log.d("GutSyncAuth", "Found existing file ID: $fileId. Loading content...")
+                val driveContent = Tasks.await(helper.readFile(fileId))
+                _appData.value = Json.decodeFromString<AppData>(driveContent)
+                Log.d("GutSyncAuth", "Data loaded from Drive successfully.")
+            }
+
+            val updatedSession = session.copy(
+                driveFolderId = folderId,
+                driveFileId = fileId
+            )
+            sessionManager.saveSession(updatedSession)
+            Log.d("GutSyncAuth", "Session updated and saved with Drive IDs.")
+            updatedSession
+        } catch (e: Exception) {
+            Log.e("GutSyncAuth", "FATAL ERROR during Drive Sync: ${e.message}")
+            e.printStackTrace()
+            throw e
+        }
     }
 
     suspend fun addMeal(nutrients: NutrientData) {

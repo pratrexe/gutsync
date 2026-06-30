@@ -48,6 +48,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import android.util.Log
 import com.google.android.gms.common.api.CommonStatusCodes
 
+import kotlinx.coroutines.launch
+
 class MainActivity : ComponentActivity() {
     private lateinit var sessionManager: SessionManager
 
@@ -58,6 +60,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             val viewModel: GutSyncViewModel = viewModel()
             var currentSession by remember { mutableStateOf(sessionManager.getSession()) }
+            var isCheckingAuth by remember { mutableStateOf(true) }
+
+            val snackbarHostState = remember { SnackbarHostState() }
+            val scope = rememberCoroutineScope()
 
             val googleSignInLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.StartActivityForResult()
@@ -67,15 +73,49 @@ class MainActivity : ComponentActivity() {
                     val account = task.getResult(ApiException::class.java)
                     if (account != null) {
                         Log.d("GutSyncAuth", "Google Sign-In Successful: ${account.email}")
-                        viewModel.syncWithDrive(this@MainActivity, account) { newSession ->
-                            Log.d("GutSyncAuth", "Drive Sync Complete: ${newSession.isDriveConnected}")
-                            currentSession = newSession
+                        viewModel.syncWithDrive(this@MainActivity, account) { newSession, error ->
+                            if (newSession != null) {
+                                Log.d("GutSyncAuth", "Drive Sync Complete. Session status: ${newSession.isLoggedIn}")
+                                sessionManager.saveSession(newSession)
+                                currentSession = newSession
+                            } else {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Drive Sync Failed: $error")
+                                }
+                            }
+                            isCheckingAuth = false // Force navigation refresh
                         }
                     }
                 } catch (e: ApiException) {
-                    val message = CommonStatusCodes.getStatusCodeString(e.statusCode)
-                    Log.e("GutSyncAuth", "Google Sign-In Failed: Status Code ${e.statusCode} ($message)")
+                    val statusText = CommonStatusCodes.getStatusCodeString(e.statusCode)
+                    val errorMsg = "Login Failed ($statusText). Please check your Google Play Services."
+                    Log.e("GutSyncAuth", errorMsg)
+                    scope.launch {
+                        snackbarHostState.showSnackbar(errorMsg)
+                    }
                     e.printStackTrace()
+                    isCheckingAuth = false
+                }
+            }
+
+            // Auto-restore logic
+            LaunchedEffect(Unit) {
+                val account = GoogleAuthHelper.getLastSignedInAccount(this@MainActivity)
+                if (account != null) {
+                    Log.d("GutSyncAuth", "Auto-redirecting registered user: ${account.email}")
+                    viewModel.syncWithDrive(this@MainActivity, account) { updated, error ->
+                        if (updated != null) {
+                            sessionManager.saveSession(updated)
+                            currentSession = updated
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Auto-sync failed: $error")
+                            }
+                        }
+                        isCheckingAuth = false
+                    }
+                } else {
+                    isCheckingAuth = false
                 }
             }
 
@@ -83,13 +123,19 @@ class MainActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     LiquidBackground()
                     
-                    if (currentSession.isLoggedIn) {
+                    if (isCheckingAuth) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Color.White)
+                        }
+                    } else if (currentSession.isLoggedIn) {
                         MainNavigation(
                             session = currentSession,
                             onConnectDrive = {
+                                isCheckingAuth = true
                                 googleSignInLauncher.launch(GoogleAuthHelper.getSignInIntent(this@MainActivity))
                             },
                             onSignOut = {
+                                GoogleAuthHelper.getSignInClient(this@MainActivity).signOut()
                                 sessionManager.clearSession()
                                 currentSession = AuthSession()
                             },
@@ -98,19 +144,25 @@ class MainActivity : ComponentActivity() {
                     } else {
                         LoginScreen(
                             onSignInWithGoogle = {
+                                isCheckingAuth = true
                                 googleSignInLauncher.launch(GoogleAuthHelper.getSignInIntent(this@MainActivity))
                             },
-                            onContinueOffline = {
+                            onContinueOffline = { name ->
                                 val offlineSession = AuthSession(
                                     isLoggedIn = true,
                                     accountType = AccountType.OFFLINE,
-                                    displayName = "Guest User"
+                                    displayName = name
                                 )
                                 sessionManager.saveSession(offlineSession)
                                 currentSession = offlineSession
                             }
                         )
                     }
+
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 32.dp)
+                    )
                 }
             }
         }
