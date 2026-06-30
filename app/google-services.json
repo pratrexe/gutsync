@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "27024180936",
+    "project_id": "com-example-gutsync-97751",
+    "storage_bucket": "com-example-gutsync-97751.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:27024180936:android:0a733f2055a237ade347fd",
+        "android_client_info": {
+          "package_name": "com.example.gutsync"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDWt-TlnUGImMbEC2LEz1SkiPPOXp_NWnk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
