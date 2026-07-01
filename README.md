@@ -4,8 +4,9 @@ GutSync is a minimalist, high-performance mobile health application designed to 
 
 ## 🌟 Key Features
 
-- **AI-Powered Meal Analysis**: Uses Gemini 2.5 Flash to extract nutritional components (Fiber, Polyphenols, etc.) from natural language meal descriptions.
-- **Microbe Impact Score**: A proprietary algorithm that calculates the impact of every meal based on AI-analyzed data.
+- **AI-Powered Meal Analysis**: Uses Groq AI (Llama 3.2 Vision & 3.3 Versatile) to extract nutritional components (Fiber, Polyphenols, etc.) from natural language meal descriptions and photos.
+- **Manual Food Logging**: A dedicated manual entry option for precise control over logged nutrients.
+- **Microbe Impact Score**: A proprietary algorithm that calculates the impact of every meal based on AI-analyzed or manually entered data.
 - **Ask Gemini**: A dedicated tab for direct interaction with an AI microbiome expert.
 - **Biotic Density Tracking**: Visualizes the concentration of fibers, polyphenols, and fermented cultures in your diet.
 - **Longitudinal Trends**: Track shifts in your gut's "Pro-inflammatory" vs "Anti-inflammatory" states over weeks and months.
@@ -15,7 +16,7 @@ GutSync is a minimalist, high-performance mobile health application designed to 
 
 - **UI**: Jetpack Compose (Material 3)
 - **Language**: Kotlin
-- **AI**: Google Gemini (via Firebase Vertex AI)
+- **AI**: Groq AI (via Groq Cloud API), Google Gemini (via Firebase Vertex AI)
 - **Image Loading**: Coil 3
 - **Icons**: Material Icons Extended
 - **Architecture**: MVVM (Model-View-ViewModel)

@@ -9,9 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -25,6 +23,7 @@ import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.data.MicrobeType
 import com.example.gutsync.data.MicrobeImpactCalculator
 import com.example.gutsync.data.NutrientData
+import com.example.gutsync.data.MicrobeShift
 import com.example.gutsync.ui.theme.SurfaceContainerHighest
 import com.example.gutsync.ui.theme.SurfaceContainerLowest
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -43,13 +42,31 @@ fun DashboardScreen(
         NutrientData(
             fiber = recentMeals.sumOf { it.nutrients.fiber.toDouble() }.toFloat(),
             polyphenols = recentMeals.sumOf { it.nutrients.polyphenols.toDouble() }.toFloat(),
-            fermentedCultures = recentMeals.sumOf { it.nutrients.fermentedCultures.toDouble() }.toInt(),
-            saturatedFats = recentMeals.sumOf { it.nutrients.saturatedFats.toDouble() }.toFloat(),
-            refinedSugars = recentMeals.sumOf { it.nutrients.refinedSugars.toDouble() }.toFloat()
+            sugar = recentMeals.sumOf { it.nutrients.sugar.toDouble() }.toFloat(),
+            saturatedFats = recentMeals.sumOf { it.nutrients.saturatedFats.toDouble() }.toFloat()
         )
     } else NutrientData()
 
-    val (healthScore, shifts) = MicrobeImpactCalculator.calculateImpact(currentNutrients)
+    val (healthScore, shifts) = remember(currentNutrients) {
+        val scorecard = MicrobeImpactCalculator.calculateGIE(currentNutrients)
+        scorecard.gutHealthScore to scorecard.predictedShifts
+    }
+
+    // Calculate REAL growth percentage (compare last 7 days to previous 7 days)
+    val growthPercentage = remember(meals) {
+        val week = 7 * 24 * 60 * 60 * 1000L
+        val now = System.currentTimeMillis()
+        val currentWeekScore = meals.filter { it.timestamp > now - week }
+            .map { MicrobeImpactCalculator.calculateGIE(it.nutrients).gutHealthScore }.average().takeIf { !it.isNaN() } ?: 0.0
+        val lastWeekScore = meals.filter { it.timestamp in (now - 2 * week)..(now - week) }
+            .map { MicrobeImpactCalculator.calculateGIE(it.nutrients).gutHealthScore }.average().takeIf { !it.isNaN() } ?: 0.0
+        
+        if (lastWeekScore > 0) {
+            (((currentWeekScore - lastWeekScore) / lastWeekScore) * 100).toInt()
+        } else {
+            0
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -61,7 +78,7 @@ fun DashboardScreen(
         item { Spacer(modifier = Modifier.height(16.dp)) }
 
         item {
-            ScoreHeroSection(score = healthScore, growth = appData.profile.growthPercentage)
+            ScoreHeroSection(score = healthScore, growth = growthPercentage)
         }
 
         // Fiber Goal Card
@@ -89,7 +106,7 @@ fun DashboardScreen(
 }
 
 @Composable
-fun MicrobeStatusGrid(shifts: List<com.example.gutsync.data.MicrobeShift>) {
+fun MicrobeStatusGrid(shifts: List<MicrobeShift>) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             val bifido = shifts.find { it.microbeType == MicrobeType.BIFIDOBACTERIUM }?.shiftPercentage?.toInt()?.coerceIn(0, 100) ?: 50

@@ -32,8 +32,8 @@ fun TrendsScreen(viewModel: GutSyncViewModel = viewModel()) {
     // Calculate real trends from meal history
     val recentMeals = appData.meals.takeLast(7)
     val trendData = recentMeals.map { log ->
-        val impact = MicrobeImpactCalculator.calculateImpact(log.nutrients)
-        val pro = (impact.first / 100f).coerceIn(0.1f, 0.9f)
+        val scorecard = MicrobeImpactCalculator.calculateGIE(log.nutrients)
+        val pro = (scorecard.gutHealthScore / 100f).coerceIn(0.1f, 0.9f)
         pro to (1f - pro)
     }.toMutableList()
     
@@ -72,8 +72,22 @@ fun TrendsScreen(viewModel: GutSyncViewModel = viewModel()) {
             }
         }
 
-        // Biological Insight Card
+        // Biological Insight Card (REAL DATA)
         item {
+            val mostImpactedMicrobe = appData.meals.takeLast(10)
+                .flatMap { MicrobeImpactCalculator.calculateGIE(it.nutrients).predictedShifts }
+                .groupBy { it.microbeType }
+                .mapValues { it.value.sumOf { shift -> shift.shiftPercentage.toDouble() } }
+                .maxByOrNull { it.value }
+            
+            val insightText = if (mostImpactedMicrobe != null && mostImpactedMicrobe.value > 0) {
+                "Your ${mostImpactedMicrobe.key.displayName} levels are trending upward based on your recent logs."
+            } else if (recentMeals.isEmpty()) {
+                "Start logging your meals to see biological insights."
+            } else {
+                "Your gut microbiome is stabilizing across all core families."
+            }
+
             Card(
                 colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF303030)),
@@ -86,8 +100,7 @@ fun TrendsScreen(viewModel: GutSyncViewModel = viewModel()) {
                         Text(text = "BIOLOGICAL INSIGHT", fontSize = 10.sp, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(
-                        text = if (recentMeals.isEmpty()) "Start logging your meals to see biological insights." 
-                               else "Your Akkermansia levels are responding to your recent dietary patterns.",
+                        text = insightText,
                         fontSize = 18.sp,
                         color = Color.White,
                         lineHeight = 28.sp
@@ -138,12 +151,13 @@ fun TrendsScreen(viewModel: GutSyncViewModel = viewModel()) {
             }
         }
 
-        // Secondary Stats
+        // Secondary Stats (REAL DATA)
         item {
             val totalFiber = recentMeals.sumOf { it.nutrients.fiber.toInt() }
+            val totalPolyphenols = recentMeals.sumOf { it.nutrients.polyphenols.toInt() }
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard("Fiber Intake", "${totalFiber}g", (totalFiber / 35f).coerceAtMost(1f), Modifier.weight(1f))
-                StatCard("Hydration", "2.4L", 0.85f, Modifier.weight(1f))
+                StatCard("Polyphenols", "${totalPolyphenols}mg", (totalPolyphenols / 1000f).coerceAtMost(1f), Modifier.weight(1f))
             }
         }
 

@@ -15,6 +15,8 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,12 +36,13 @@ import com.example.gutsync.UiState
 import com.example.gutsync.data.ChatMessage
 import com.example.gutsync.data.ChatSession
 import com.example.gutsync.data.MessageRole
+import com.example.gutsync.data.auth.AuthSession
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 @Composable
-fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
+fun AskGeminiScreen(session: AuthSession, viewModel: GutSyncViewModel = viewModel()) {
     var question by remember { mutableStateOf("") }
     val currentSession by viewModel.currentSession.collectAsState()
     val chatHistory by viewModel.chatHistory.collectAsState()
@@ -103,12 +106,18 @@ fun AskGeminiScreen(viewModel: GutSyncViewModel = viewModel()) {
                 }
 
                 items(currentSession.messages) { message ->
-                    ChatBubble(message)
+                    ChatBubble(message, session)
                 }
                 
                 if (uiState is UiState.Loading) {
                     item {
                         LoadingBubble()
+                    }
+                }
+
+                if (uiState is UiState.Error) {
+                    item {
+                        ErrorBubble((uiState as UiState.Error).errorMessage)
                     }
                 }
             }
@@ -228,7 +237,7 @@ fun ChatSessionHighlightCard(session: ChatSession, onClick: () -> Unit) {
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage) {
+fun ChatBubble(message: ChatMessage, session: AuthSession) {
     val isUser = message.role == MessageRole.USER
     
     Column(
@@ -253,6 +262,26 @@ fun ChatBubble(message: ChatMessage) {
                 Text(text = "Cooper", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             } else {
                 Text(text = "Me", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                if (session.photoUrl != null) {
+                    Image(
+                        painter = rememberAsyncImagePainter(session.photoUrl),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(Color.DarkGray, CircleShape)
+                            .padding(4.dp)
+                    )
+                }
             }
         }
 
@@ -273,6 +302,49 @@ fun ChatBubble(message: ChatMessage) {
                 fontSize = 15.sp,
                 lineHeight = 20.sp
             )
+        }
+    }
+}
+
+@Composable
+fun ErrorBubble(error: String) {
+    Column(horizontalAlignment = Alignment.Start) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(bottom = 4.dp)
+        ) {
+            Icon(
+                Icons.Default.AutoAwesome,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp).background(Color.DarkGray, CircleShape).padding(4.dp)
+            )
+            Text(text = "Cooper", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        }
+        Surface(
+            color = Color(0xFFFEE2E2), // Very light red
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 4.dp, bottomEnd = 16.dp),
+            modifier = Modifier.padding(bottom = 4.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Default.Error,
+                    contentDescription = null,
+                    tint = Color(0xFFB91C1C), // Red-700
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "Sync/AI Error: $error",
+                    color = Color(0xFF991B1B), // Red-800
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            }
         }
     }
 }

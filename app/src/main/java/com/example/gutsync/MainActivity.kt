@@ -227,7 +227,7 @@ fun MainNavigation(
                     )
                     1 -> MealLoggerScreen(viewModel = viewModel)
                     2 -> TrendsScreen(viewModel = viewModel)
-                    3 -> AskGeminiScreen(viewModel = viewModel)
+                    3 -> AskGeminiScreen(session = session, viewModel = viewModel)
                     4 -> SettingsScreen(
                         session = session,
                         onConnectDrive = onConnectDrive,

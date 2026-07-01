@@ -9,54 +9,84 @@ enum class MicrobeType(val displayName: String) {
     BACTEROIDES("Bacteroides")
 }
 
+/**
+ * Enhanced GIE Data Model (Step 1 & 2)
+ */
 @Serializable
 data class NutrientData(
     val foodName: String = "",
     val calories: Int = 0,
-    val fiber: Float = 0f, // in grams
-    val saturatedFats: Float = 0f, // in grams
-    val refinedSugars: Float = 0f, // in grams
-    val animalProtein: Float = 0f, // in grams
-    val polyphenols: Float = 0f, // in mg
-    val fermentedCultures: Int = 0 // count of active cultures
+    val fiber: Float = 0f, 
+    val resistantStarch: Float = 0f, // Added for high-fidelity tracking
+    val sugar: Float = 0f,
+    val saturatedFats: Float = 0f,
+    val animalProtein: Float = 0f,
+    val polyphenols: Float = 0f,
+    val fermentedStatus: Boolean = false,
+    val artificialSweeteners: List<String> = emptyList(), // Negative impact on Bacteroides
+    val additives: List<String> = emptyList(), // e.g., Emulsifiers
+    val mainPrebioticCompound: String = "" // e.g., "Beta-Glucan"
 )
 
+@Serializable
+data class GIEScorecard(
+    val gutHealthScore: Int,
+    val diversityScore: Int,
+    val prebioticScore: Int,
+    val probioticScore: Int,
+    val inflammationRisk: Int,
+    val predictedShifts: List<MicrobeShift>,
+    val confidenceLevel: String, // "High", "Medium", "Low"
+    val scientificReasoning: String
+)
+
+@Serializable
 data class MicrobeShift(
     val microbeType: MicrobeType,
-    val shiftPercentage: Float // -100 to 100
+    val shiftPercentage: Float, // -100 to 100
+    val confidence: Int // 0-100
 )
 
 object MicrobeImpactCalculator {
     /**
-     * Calculates the impact of a meal on the 4 core microbial families.
-     * Returns a score from 0 to 100 and a list of shifts.
+     * The GIE Logic (Step 3 - Local Implementation)
+     * Maps Step 2 knowledge data into a weighted scoring model.
      */
-    fun calculateImpact(nutrients: NutrientData): Pair<Int, List<MicrobeShift>> {
+    fun calculateGIE(nutrients: NutrientData): GIEScorecard {
         val shifts = mutableListOf<MicrobeShift>()
         
-        // Bifidobacterium & Lactobacillus: Promoted by Fiber and Fermented Foods
-        val fiberBonus = (nutrients.fiber / 10f).coerceAtMost(0.4f)
-        val fermentedBonus = (nutrients.fermentedCultures * 0.1f).coerceAtMost(0.3f)
+        // 1. Bifidobacterium & Lactobacillus: Boosted by Fiber, Starch, and Fermentation
+        val fiberImpact = ((nutrients.fiber + nutrients.resistantStarch) * 5f).coerceAtMost(40f)
+        val fermentedBonus = if (nutrients.fermentedStatus) 30f else 0f
+        val bifidoLactoBase = (fiberImpact + fermentedBonus).coerceIn(0f, 100f)
         
-        shifts.add(MicrobeShift(MicrobeType.BIFIDOBACTERIUM, (fiberBonus + fermentedBonus) * 100))
-        shifts.add(MicrobeShift(MicrobeType.LACTOBACILLUS, (fiberBonus + fermentedBonus) * 100))
+        shifts.add(MicrobeShift(MicrobeType.BIFIDOBACTERIUM, bifidoLactoBase, 85))
+        shifts.add(MicrobeShift(MicrobeType.LACTOBACILLUS, bifidoLactoBase, 80))
 
-        // Akkermansia: Promoted by Polyphenols
-        val polyphenolBonus = (nutrients.polyphenols / 500f).coerceAtMost(0.5f)
-        shifts.add(MicrobeShift(MicrobeType.AKKERMANSIA, polyphenolBonus * 100))
+        // 2. Akkermansia: Boosted by Polyphenols
+        val akkerImpact = (nutrients.polyphenols / 5f).coerceIn(0f, 100f)
+        shifts.add(MicrobeShift(MicrobeType.AKKERMANSIA, akkerImpact, 70))
 
-        // Bacteroides: Inhibited by Saturated Fats & Sugars
-        val fatPenalty = (nutrients.saturatedFats / 20f).coerceAtMost(0.3f)
-        val sugarPenalty = (nutrients.refinedSugars / 30f).coerceAtMost(0.3f)
-        shifts.add(MicrobeShift(MicrobeType.BACTEROIDES, -(fatPenalty + sugarPenalty) * 100))
+        // 3. Bacteroides: Inhibited by Sugar, Saturated Fats, and Additives
+        var bacterPenalty = (nutrients.sugar * 2f) + (nutrients.saturatedFats * 3f)
+        if (nutrients.additives.isNotEmpty()) bacterPenalty += 20f
+        val bacterShift = -bacterPenalty.coerceIn(0f, 100f)
+        shifts.add(MicrobeShift(MicrobeType.BACTEROIDES, bacterShift, 60))
 
-        // Final Score calculation (base 70, adjusted by nutrients)
-        var score = 70f
-        score += (nutrients.fiber * 2f)
-        score += (nutrients.polyphenols / 50f)
-        score -= (nutrients.saturatedFats * 1.5f)
-        score -= (nutrients.refinedSugars * 1.5f)
-        
-        return Pair(score.toInt().coerceIn(0, 100), shifts)
+        // 4. Synthesize Aggregate Scores
+        val diversity = (bifidoLactoBase + akkerImpact).toInt().coerceIn(0, 100)
+        val inflammation = bacterPenalty.toInt().coerceIn(0, 100)
+        val overall = (diversity - (inflammation / 2) + 50).coerceIn(0, 100)
+
+        return GIEScorecard(
+            gutHealthScore = overall,
+            diversityScore = diversity,
+            prebioticScore = (nutrients.fiber * 3).toInt().coerceIn(0, 100),
+            probioticScore = if (nutrients.fermentedStatus) 100 else 0,
+            inflammationRisk = inflammation,
+            predictedShifts = shifts,
+            confidenceLevel = "High",
+            scientificReasoning = "Based on presence of ${nutrients.mainPrebioticCompound ?: "fiber"} and nutrient profile."
+        )
     }
 }
