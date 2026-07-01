@@ -114,9 +114,9 @@ class GutSyncRepository(private val context: Context) {
         }
     }
 
-    suspend fun addMeal(nutrients: NutrientData, imageBase64: String? = null) {
+    suspend fun addMeal(nutrients: NutrientData, imageBase64: String? = null, qwenExplanation: String? = null) {
         val currentMeals = _appData.value.meals.toMutableList()
-        currentMeals.add(MealLogEntry(nutrients, imageBase64 = imageBase64))
+        currentMeals.add(MealLogEntry(nutrients, imageBase64 = imageBase64, qwenExplanation = qwenExplanation))
         _appData.value = _appData.value.copy(meals = currentMeals)
         saveData()
     }

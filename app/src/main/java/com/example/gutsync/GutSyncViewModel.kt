@@ -11,6 +11,7 @@ import com.example.gutsync.data.ChatSession
 import com.example.gutsync.data.GroqClient
 import com.example.gutsync.data.MessageRole
 import com.example.gutsync.data.NutrientData
+import com.example.gutsync.data.MicrobeImpactCalculator
 import com.example.gutsync.data.auth.AuthSession
 import com.example.gutsync.data.storage.AppData
 import com.example.gutsync.data.storage.GutSyncRepository
@@ -38,6 +39,9 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
 
     private val _analyzedFood: MutableStateFlow<NutrientData?> = MutableStateFlow(null)
     val analyzedFood: StateFlow<NutrientData?> = _analyzedFood.asStateFlow()
+
+    private val _qwenExplanation = MutableStateFlow<String?>(null)
+    val qwenExplanation: StateFlow<String?> = _qwenExplanation.asStateFlow()
 
     private val _capturedImage = MutableStateFlow<Bitmap?>(null)
     val capturedImage: StateFlow<Bitmap?> = _capturedImage.asStateFlow()
@@ -107,17 +111,20 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                     finalDescription = identifiedJSON.optJSONArray("foodNames")?.join(", ") ?: description
                 }
 
-                // STEP 2: Database Search & Gut Analysis (Kotlin Logic + Qwen Explanation)
+                // STEP 2: Database Search & Build Nutrition JSON
                 val searchPrompt = """
                     Act as the Gut Intelligence Engine. Analyze: $finalDescription.
                     Context from Image: ${identifiedJSON.toString()}
                     
-                    Use USDA and Open Food Facts logic to return nutrition and gut impact.
+                    Use USDA and Open Food Facts logic to return a complete nutrition profile.
                     
                     Return ONLY a JSON object:
                     {
                       "foodName": "string",
                       "calories": integer,
+                      "protein": float,
+                      "carbs": float,
+                      "totalFat": float,
                       "fiber": float,
                       "resistantStarch": float,
                       "sugar": float,
@@ -125,6 +132,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                       "animalProtein": float,
                       "polyphenols": float,
                       "fermentedStatus": boolean,
+                      "additives": ["string"],
                       "mainPrebioticCompound": "string",
                       "sourceFound": "string"
                     }
@@ -141,6 +149,9 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 val nutrientData = NutrientData(
                     foodName = json.optString("foodName"),
                     calories = json.optInt("calories"),
+                    protein = json.optDouble("protein").toFloat(),
+                    carbs = json.optDouble("carbs").toFloat(),
+                    totalFat = json.optDouble("totalFat").toFloat(),
                     fiber = json.optDouble("fiber").toFloat(),
                     resistantStarch = json.optDouble("resistantStarch").toFloat(),
                     sugar = json.optDouble("sugar").toFloat(),
@@ -148,9 +159,43 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                     animalProtein = json.optDouble("animalProtein").toFloat(),
                     polyphenols = json.optDouble("polyphenols").toFloat(),
                     fermentedStatus = json.optBoolean("fermentedStatus"),
+                    additives = mutableListOf<String>().apply {
+                        val array = json.optJSONArray("additives")
+                        if (array != null) {
+                            for (i in 0 until array.length()) {
+                                add(array.getString(i))
+                            }
+                        }
+                    },
                     mainPrebioticCompound = json.optString("mainPrebioticCompound"),
                     sourceFound = json.optString("sourceFound")
                 )
+                
+                // STEP 3: Gut Analysis Engine (Kotlin Logic)
+                val scorecard = MicrobeImpactCalculator.calculateGIE(nutrientData)
+                
+                // STEP 4: AI Explanation (Qwen)
+                val explanationPrompt = """
+                    Explain this Gut Health Score: ${scorecard.gutHealthScore}/100.
+                    Nutrients: ${resultText}
+                    Microbe Shifts: ${scorecard.predictedShifts.joinToString { shift -> "${shift.microbeType.displayName}: ${shift.shiftPercentage}%" }}
+                    
+                    Specifically mention:
+                    - Bifidobacterium, Lactobacillus, Akkermansia, and Bacteroides impact.
+                    - Prebiotic and Probiotic scores.
+                    - Diversity score and Inflammation risk.
+                    - Suggestions for improvement.
+                    
+                    Keep it concise and scientific. No markdown symbols.
+                """.trimIndent()
+                
+                val explanation = GroqClient.generateContent(
+                    prompt = explanationPrompt,
+                    model = qwenModel,
+                    isJson = false
+                ).replace("*", "").replace("#", "")
+
+                _qwenExplanation.value = explanation
                 _analyzedFood.value = nutrientData
                 _analysisState.value = UiState.Success("Qwen Analysis Complete")
             } catch (e: Exception) {
@@ -162,10 +207,12 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
     fun addAnalyzedFood() {
         analyzedFood.value?.let { nutrients ->
             val base64 = capturedImage.value?.toBase64()
+            val explanation = qwenExplanation.value
             viewModelScope.launch {
-                repository.addMeal(nutrients, imageBase64 = base64)
+                repository.addMeal(nutrients, imageBase64 = base64, qwenExplanation = explanation)
                 _analyzedFood.value = null
                 _capturedImage.value = null
+                _qwenExplanation.value = null
             }
         }
     }

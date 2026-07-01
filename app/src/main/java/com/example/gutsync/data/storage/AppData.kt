@@ -23,5 +23,6 @@ data class UserProfile(
 data class MealLogEntry(
     val nutrients: NutrientData,
     val timestamp: Long = System.currentTimeMillis(),
-    val imageBase64: String? = null
+    val imageBase64: String? = null,
+    val qwenExplanation: String? = null
 )

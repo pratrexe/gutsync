@@ -16,6 +16,9 @@ enum class MicrobeType(val displayName: String) {
 data class NutrientData(
     val foodName: String = "",
     val calories: Int = 0,
+    val protein: Float = 0f,
+    val carbs: Float = 0f,
+    val totalFat: Float = 0f,
     val fiber: Float = 0f, 
     val resistantStarch: Float = 0f, // Added for high-fidelity tracking
     val sugar: Float = 0f,

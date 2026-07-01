@@ -2,6 +2,7 @@ package com.example.gutsync.ui.screens
 
 import android.graphics.Bitmap
 import android.net.Uri
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.launch
@@ -48,6 +49,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
     var showManualDialog by remember { mutableStateOf(false) }
     val appData by viewModel.appData.collectAsState()
     val analyzedFood by viewModel.analyzedFood.collectAsState()
+    val qwenExplanation by viewModel.qwenExplanation.collectAsState()
     val uiState by viewModel.analysisState.collectAsState()
     val capturedImage by viewModel.capturedImage.collectAsState()
     val context = LocalContext.current
@@ -200,6 +202,41 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Confirm and Log Meal", fontWeight = FontWeight.Bold)
                     }
+                } else if (uiState is UiState.Error && capturedImage != null) {
+                    // Improved Google Lens Fallback using standard SEND intent for local files
+                    Button(
+                        onClick = {
+                            try {
+                                val lensIntent = Intent("com.google.android.googlequicksearchbox.GOOGLE_LENS")
+                                lensIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                lensIntent.setDataAndType(photoUri, "image/jpeg")
+                                lensIntent.setPackage("com.google.android.googlequicksearchbox")
+                                context.startActivity(lensIntent)
+                            } catch (e: Exception) {
+                                // Fallback to standard ACTION_SEND if custom action fails
+                                try {
+                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "image/jpeg"
+                                        putExtra(Intent.EXTRA_STREAM, photoUri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        setPackage("com.google.android.googlequicksearchbox")
+                                    }
+                                    context.startActivity(sendIntent)
+                                } catch (e2: Exception) {
+                                    // Final fallback to web browser
+                                    val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/searchbyimage?image_url=$photoUri"))
+                                    context.startActivity(webIntent)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4), contentColor = Color.White),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Identify with Google Lens", fontWeight = FontWeight.Bold)
+                    }
                 } else if (capturedImage != null || searchQuery.isNotBlank()) {
                     Button(
                         onClick = { viewModel.analyzeFood(searchQuery, capturedImage) },
@@ -251,7 +288,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                     ) {
                         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text("GIE SCIENTIFIC INSIGHT", fontSize = 10.sp, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(scorecard.scientificReasoning, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
+                            Text(qwenExplanation ?: scorecard.scientificReasoning, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
                             HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 ScoreLabel("Inflammation Risk", "${scorecard.inflammationRisk}%")
