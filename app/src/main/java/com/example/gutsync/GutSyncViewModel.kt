@@ -24,10 +24,15 @@ import java.io.ByteArrayOutputStream
 class GutSyncViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = GutSyncRepository(application)
 
-    private val _uiState: MutableStateFlow<UiState> =
+    private val _analysisState: MutableStateFlow<UiState> =
         MutableStateFlow(UiState.Initial)
-    val uiState: StateFlow<UiState> =
-        _uiState.asStateFlow()
+    val analysisState: StateFlow<UiState> =
+        _analysisState.asStateFlow()
+
+    private val _chatState: MutableStateFlow<UiState> =
+        MutableStateFlow(UiState.Initial)
+    val chatState: StateFlow<UiState> =
+        _chatState.asStateFlow()
 
     val appData: StateFlow<AppData> = repository.appData
 
@@ -46,7 +51,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
 
     // Pure Groq Models
     private val groqTextModel = "llama-3.3-70b-versatile"
-    private val groqVisionModel = "llama-3.2-11b-vision-preview"
+    private val groqVisionModel = "meta-llama/llama-4-scout-17b-16e-instruct"
 
     private fun Bitmap.toBase64(): String {
         val outputStream = ByteArrayOutputStream()
@@ -61,28 +66,29 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
 
     fun startNewChat() {
         _currentSession.value = ChatSession()
-        _uiState.value = UiState.Initial
+        _chatState.value = UiState.Initial
     }
     
     fun openSession(session: ChatSession) {
         _currentSession.value = session
-        _uiState.value = if (session.messages.isNotEmpty()) UiState.Success("Loaded session") else UiState.Initial
+        _chatState.value = if (session.messages.isNotEmpty()) UiState.Success("Loaded session") else UiState.Initial
     }
 
     fun analyzeFood(description: String, bitmap: Bitmap? = null) {
-        _uiState.value = UiState.Loading
+        _analysisState.value = UiState.Loading
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val giePrompt = """
-                    Act as the Gut Intelligence Engine. Analyze this food: $description.
-                    Use your internal knowledge base of USDA FoodData Central and Open Food Facts.
-                    Identify exactly what is in the food. 
-                    Provide exact estimates for: Fiber, Resistant Starch, Sugar, Saturated Fat, Polyphenols.
-                    Identify if the food is fermented. Identify the main prebiotic compound.
+                    Act as the Gut Intelligence Engine (GIE). 
+                    Your task is to analyze the food in the provided image or description: "$description".
                     
-                    Return ONLY a JSON object with this schema:
+                    STEP 1: Identify the food items and their exact quantities.
+                    STEP 2: Use your internal high-fidelity knowledge base of USDA FoodData Central and Open Food Facts to find matching nutrient profiles.
+                    STEP 3: Calculate the impact on the human gut microbiome.
+                    
+                    Return ONLY a JSON object with this precise schema:
                     {
-                      "foodName": "string",
+                      "foodName": "string (The most accurate common name found in USDA/OFF)",
                       "calories": integer,
                       "fiber": float,
                       "resistantStarch": float,
@@ -91,7 +97,8 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                       "animalProtein": float,
                       "polyphenols": float (mg),
                       "fermentedStatus": boolean,
-                      "mainPrebioticCompound": "string"
+                      "mainPrebioticCompound": "string (e.g., Inulin, Pectin, Beta-Glucan)",
+                      "sourceFound": "string (either 'USDA FoodData Central' or 'Open Food Facts')"
                     }
                 """.trimIndent()
                 
@@ -103,8 +110,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                     base64Image = base64
                 )
 
-                resultText?.let { jsonString ->
-                    val json = JSONObject(jsonString)
+                val json = JSONObject(resultText)
                     val nutrientData = NutrientData(
                         foodName = json.optString("foodName"),
                         calories = json.optInt("calories"),
@@ -115,30 +121,32 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                         animalProtein = json.optDouble("animalProtein").toFloat(),
                         polyphenols = json.optDouble("polyphenols").toFloat(),
                         fermentedStatus = json.optBoolean("fermentedStatus"),
-                        mainPrebioticCompound = json.optString("mainPrebioticCompound")
+                        mainPrebioticCompound = json.optString("mainPrebioticCompound"),
+                        sourceFound = json.optString("sourceFound")
                     )
                     _analyzedFood.value = nutrientData
-                    _uiState.value = UiState.Success("GIE Analysis Complete (USDA/OFF Data)")
-                } ?: throw Exception("Groq GIE Analysis failed")
+                    _analysisState.value = UiState.Success("GIE Analysis Complete")
             } catch (e: Exception) {
-                _uiState.value = UiState.Error(e.localizedMessage ?: "GIE Analysis Failed")
+                _analysisState.value = UiState.Error(e.localizedMessage ?: "GIE Analysis Failed")
             }
         }
     }
 
     fun addAnalyzedFood() {
         analyzedFood.value?.let { nutrients ->
+            val base64 = capturedImage.value?.toBase64()
             viewModelScope.launch {
-                repository.addMeal(nutrients)
+                repository.addMeal(nutrients, imageBase64 = base64)
                 _analyzedFood.value = null
                 _capturedImage.value = null
             }
         }
     }
 
-    fun logManualMeal(nutrients: NutrientData) {
+    fun logManualMeal(nutrients: NutrientData, bitmap: Bitmap? = null) {
+        val base64 = bitmap?.toBase64()
         viewModelScope.launch {
-            repository.addMeal(nutrients)
+            repository.addMeal(nutrients, imageBase64 = base64)
         }
     }
 
@@ -147,7 +155,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         val updatedMsgs = _currentSession.value.messages + userMsg
         _currentSession.value = _currentSession.value.copy(messages = updatedMsgs)
         
-        _uiState.value = UiState.Loading
+        _chatState.value = UiState.Loading
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -157,7 +165,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 
                 val resultText = GroqClient.generateContent(prompt, model = groqTextModel)
 
-                resultText?.let { outputContent ->
+                val outputContent = resultText
                     val cleanContent = outputContent
                         .replace("**", "")
                         .replace("*", "")
@@ -181,10 +189,9 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                     
                     _currentSession.value = finalSession
                     repository.updateChatSession(finalSession)
-                    _uiState.value = UiState.Success(cleanContent)
-                } ?: throw Exception("Groq Expert failed")
+                    _chatState.value = UiState.Success(cleanContent)
             } catch (e: Exception) {
-                _uiState.value = UiState.Error(e.localizedMessage ?: "Expert unavailable")
+                _chatState.value = UiState.Error(e.localizedMessage ?: "Expert unavailable")
             }
         }
     }

@@ -1,5 +1,11 @@
 package com.example.gutsync
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.scale
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -191,6 +197,7 @@ fun MainNavigation(
     var navVisible by remember { mutableStateOf(true) }
     val navOffset by animateFloatAsState(
         targetValue = if (navVisible) 0f else 300f,
+        animationSpec = tween(durationMillis = 800),
         label = "nav_offset"
     )
 
@@ -260,65 +267,91 @@ fun DynamicIslandNav(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
-            .height(64.dp)
+            .height(70.dp)
             .widthIn(max = 350.dp)
             .clip(CircleShape)
     ) {
+        val totalWidth = maxWidth
+        val tabWidth = totalWidth / tabs.size
+        
+        // Animated indicator offset
+        val indicatorOffset by animateDpAsState(
+            targetValue = tabWidth * selectedTab,
+            animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioLowBouncy),
+            label = "indicator_offset"
+        )
+
+        // 1. Base Glass Container
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .blur(20.dp)
-                .background(Color.Black.copy(alpha = 0.4f))
+                .blur(15.dp)
+                .background(Color.White.copy(alpha = 0.05f))
+                .border(
+                    BorderStroke(
+                        1.dp,
+                        Brush.verticalGradient(
+                            listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)
+                        )
+                    ),
+                    CircleShape
+                )
         )
 
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color.Transparent,
-            border = BorderStroke(
-                width = 1.dp,
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.2f),
-                        Color.Transparent
-                    )
-                )
-            ),
-            shape = CircleShape
-        ) {
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 8.dp)
-                    .fillMaxHeight(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                tabs.forEachIndexed { index, item ->
-                    val isSelected = selectedTab == index
-                    val iconColor by animateColorAsState(
-                        targetValue = if (isSelected) Color.White else Color.Gray,
-                        label = "icon_color"
-                    )
-                    
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(CircleShape)
-                            .background(
-                                color = if (isSelected) Color.White.copy(alpha = 0.1f) else Color.Transparent
-                            )
-                            .clickable { onTabSelected(index) }
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = item.label,
-                            tint = iconColor,
-                            modifier = Modifier.size(24.dp)
+        // 2. Sliding Indicator (The "Pill")
+        Box(
+            modifier = Modifier
+                .padding(6.dp)
+                .offset(x = indicatorOffset)
+                .width(tabWidth - 12.dp)
+                .fillMaxHeight()
+                .clip(CircleShape)
+                .blur(8.dp) // Extra internal blur for the black tint
+                .background(Color.Black.copy(alpha = 0.5f))
+                .border(
+                    BorderStroke(
+                        1.dp,
+                        Brush.verticalGradient(
+                            listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)
                         )
-                    }
+                    ),
+                    CircleShape
+                )
+        )
+
+        // 3. Icons Layer
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            tabs.forEachIndexed { index, item ->
+                val isSelected = selectedTab == index
+                val iconColor by animateColorAsState(
+                    targetValue = if (isSelected) Color.White else Color.Gray.copy(alpha = 0.8f),
+                    label = "icon_color"
+                )
+                val iconScale by animateFloatAsState(
+                    targetValue = if (isSelected) 1.5f else 1f,
+                    label = "icon_scale"
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable { onTabSelected(index) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = item.label,
+                        tint = iconColor,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .scale(iconScale)
+                    )
                 }
             }
         }

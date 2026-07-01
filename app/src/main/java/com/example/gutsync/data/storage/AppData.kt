@@ -22,5 +22,6 @@ data class UserProfile(
 @Serializable
 data class MealLogEntry(
     val nutrients: NutrientData,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val imageBase64: String? = null
 )

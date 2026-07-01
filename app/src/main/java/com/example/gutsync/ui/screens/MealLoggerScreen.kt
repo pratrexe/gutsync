@@ -1,6 +1,7 @@
 package com.example.gutsync.ui.screens
 
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.launch
@@ -28,15 +29,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.UiState
 import com.example.gutsync.data.MicrobeImpactCalculator
 import com.example.gutsync.data.NutrientData
 import com.example.gutsync.ui.theme.SurfaceContainerLow
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.io.File
 
 @Composable
 fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
@@ -44,14 +48,37 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
     var showManualDialog by remember { mutableStateOf(false) }
     val appData by viewModel.appData.collectAsState()
     val analyzedFood by viewModel.analyzedFood.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.analysisState.collectAsState()
     val capturedImage by viewModel.capturedImage.collectAsState()
+    val context = LocalContext.current
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Permission granted, do nothing and wait for user to click again or auto-launch
+        }
+    }
+
+    val photoUri = remember {
+        val imagesDir = File(context.cacheDir, "images")
+        if (!imagesDir.exists()) imagesDir.mkdirs()
+        val tempFile = File.createTempFile("captured_meal_", ".jpg", imagesDir)
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
+    }
 
     val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicturePreview()
-    ) { bitmap ->
-        if (bitmap != null) {
-            viewModel.setCapturedImage(bitmap)
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            try {
+                context.contentResolver.openInputStream(photoUri)?.use { stream ->
+                    val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
+                    viewModel.setCapturedImage(bitmap)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -101,7 +128,13 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                     .clip(RoundedCornerShape(24.dp))
                     .background(SurfaceContainerLow)
                     .border(1.dp, Color(0xFF2C2C2E), RoundedCornerShape(24.dp))
-                    .clickable { cameraLauncher.launch() },
+                    .clickable {
+                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            cameraLauncher.launch(photoUri)
+                        } else {
+                            permissionLauncher.launch(android.Manifest.permission.CAMERA)
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 if (capturedImage != null) {
@@ -193,18 +226,37 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
 
             item {
                 val scorecard = MicrobeImpactCalculator.calculateGIE(analyzedFood!!)
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SurfaceContainerLow),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("GIE SCIENTIFIC INSIGHT", fontSize = 10.sp, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(scorecard.scientificReasoning, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            ScoreLabel("Inflammation Risk", "${scorecard.inflammationRisk}%")
-                            ScoreLabel("Diversity Score", "${scorecard.diversityScore}%")
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // Data Source Badge
+                    if (analyzedFood!!.sourceFound.isNotBlank()) {
+                        Surface(
+                            color = Color.White.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) {
+                            Text(
+                                text = "Source: ${analyzedFood!!.sourceFound}",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SurfaceContainerLow),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("GIE SCIENTIFIC INSIGHT", fontSize = 10.sp, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(scorecard.scientificReasoning, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                ScoreLabel("Inflammation Risk", "${scorecard.inflammationRisk}%")
+                                ScoreLabel("Diversity Score", "${scorecard.diversityScore}%")
+                            }
                         }
                     }
                 }
@@ -235,119 +287,12 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
     if (showManualDialog) {
         ManualLogDialog(
             onDismiss = { showManualDialog = false },
-            onConfirm = { nutrients ->
-                viewModel.logManualMeal(nutrients)
+            onConfirm = { nutrients, bitmap ->
+                viewModel.logManualMeal(nutrients, bitmap)
                 showManualDialog = false
             }
         )
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ManualLogDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (NutrientData) -> Unit
-) {
-    var foodName by remember { mutableStateOf("") }
-    var calories by remember { mutableStateOf("") }
-    var fiber by remember { mutableStateOf("") }
-    var starch by remember { mutableStateOf("") }
-    var sugar by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Manual Food Log", color = Color.White) },
-        containerColor = Color(0xFF1C1C1E),
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = foodName,
-                    onValueChange = { foodName = it },
-                    label = { Text("Food Name") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color.White,
-                        unfocusedBorderColor = Color.Gray
-                    )
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = calories,
-                        onValueChange = { calories = it },
-                        label = { Text("Kcal") },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color.White,
-                            unfocusedBorderColor = Color.Gray
-                        )
-                    )
-                    OutlinedTextField(
-                        value = fiber,
-                        onValueChange = { fiber = it },
-                        label = { Text("Fiber (g)") },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color.White,
-                            unfocusedBorderColor = Color.Gray
-                        )
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = starch,
-                        onValueChange = { starch = it },
-                        label = { Text("Starch (g)") },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color.White,
-                            unfocusedBorderColor = Color.Gray
-                        )
-                    )
-                    OutlinedTextField(
-                        value = sugar,
-                        onValueChange = { sugar = it },
-                        label = { Text("Sugar (g)") },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color.White,
-                            unfocusedBorderColor = Color.Gray
-                        )
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    onConfirm(NutrientData(
-                        foodName = foodName,
-                        calories = calories.toIntOrNull() ?: 0,
-                        fiber = fiber.toFloatOrNull() ?: 0f,
-                        resistantStarch = starch.toFloatOrNull() ?: 0f,
-                        sugar = sugar.toFloatOrNull() ?: 0f
-                    ))
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
-            ) {
-                Text("Log Entry")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = Color.Gray)
-            }
-        }
-    )
 }
 
 @Composable
@@ -430,6 +375,17 @@ fun BioticRow(label: String, value: String) {
 @Composable
 fun RealRecentItemRow(entry: com.example.gutsync.data.storage.MealLogEntry) {
     val nutrients = entry.nutrients
+    val imageBitmap = remember(entry.imageBase64) {
+        entry.imageBase64?.let { base64 ->
+            try {
+                val decodedString = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                android.graphics.BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size).asImageBitmap()
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceContainerLow),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2C2C2E)),
@@ -437,14 +393,40 @@ fun RealRecentItemRow(entry: com.example.gutsync.data.storage.MealLogEntry) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column {
-                Text(text = nutrients.foodName, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+            // Photo Thumbnail
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.05f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (imageBitmap != null) {
+                    Image(
+                        bitmap = imageBitmap,
+                        contentDescription = "Food Photo",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.Gray.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = nutrients.foodName, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                 Text(text = "Logged • ${nutrients.calories} kcal", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            
             Surface(
                 color = Color.White.copy(alpha = 0.1f),
                 shape = CircleShape
@@ -460,4 +442,180 @@ fun RealRecentItemRow(entry: com.example.gutsync.data.storage.MealLogEntry) {
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ManualLogDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (NutrientData, Bitmap?) -> Unit
+) {
+    var foodName by remember { mutableStateOf("") }
+    var calories by remember { mutableStateOf("") }
+    var fiber by remember { mutableStateOf("") }
+    var starch by remember { mutableStateOf("") }
+    var sugar by remember { mutableStateOf("") }
+    var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    val context = LocalContext.current
+
+    val photoUri = remember {
+        val imagesDir = File(context.cacheDir, "images")
+        if (!imagesDir.exists()) imagesDir.mkdirs()
+        val tempFile = File.createTempFile("manual_meal_", ".jpg", imagesDir)
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            try {
+                context.contentResolver.openInputStream(photoUri)?.use { stream ->
+                    val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
+                    capturedBitmap = bitmap
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // User can try clicking again
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Manual Food Log", color = Color.White) },
+        containerColor = Color(0xFF1C1C1E),
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Photo Picker Section
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceContainerLow)
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                        .clickable {
+                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                cameraLauncher.launch(photoUri)
+                            } else {
+                                permissionLauncher.launch(android.Manifest.permission.CAMERA)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (capturedBitmap != null) {
+                        Image(
+                            bitmap = capturedBitmap!!.asImageBitmap(),
+                            contentDescription = "Manual Photo",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
+                        Icon(Icons.Default.CameraAlt, "Retake", tint = Color.White)
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.CameraAlt, null, tint = Color.Gray)
+                            Text("Add Photo", color = Color.Gray, fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = foodName,
+                    onValueChange = { foodName = it },
+                    label = { Text("Food Name") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color.White,
+                        unfocusedBorderColor = Color.Gray
+                    )
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = calories,
+                        onValueChange = { calories = it },
+                        label = { Text("Kcal") },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.Gray
+                        )
+                    )
+                    OutlinedTextField(
+                        value = fiber,
+                        onValueChange = { fiber = it },
+                        label = { Text("Fiber (g)") },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.Gray
+                        )
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = starch,
+                        onValueChange = { starch = it },
+                        label = { Text("Starch (g)") },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.Gray
+                        )
+                    )
+                    OutlinedTextField(
+                        value = sugar,
+                        onValueChange = { sugar = it },
+                        label = { Text("Sugar (g)") },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.Gray
+                        )
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm(
+                        NutrientData(
+                            foodName = foodName,
+                            calories = calories.toIntOrNull() ?: 0,
+                            fiber = fiber.toFloatOrNull() ?: 0f,
+                            resistantStarch = starch.toFloatOrNull() ?: 0f,
+                            sugar = sugar.toFloatOrNull() ?: 0f
+                        ),
+                        capturedBitmap
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+            ) {
+                Text("Log Entry")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.Gray)
+            }
+        }
+    )
 }

@@ -26,7 +26,9 @@ android {
             localProperties.load(localPropertiesFile.inputStream())
         }
         val groqApiKey = localProperties.getProperty("GROQ_API_KEY") ?: ""
+        val nvidiaApiKey = localProperties.getProperty("NVIDIA_API_KEY") ?: ""
         buildConfigField("String", "GROQ_API_KEY", "\"$groqApiKey\"")
+        buildConfigField("String", "NVIDIA_API_KEY", "\"$nvidiaApiKey\"")
     }
 
     buildTypes {

@@ -25,7 +25,8 @@ data class NutrientData(
     val fermentedStatus: Boolean = false,
     val artificialSweeteners: List<String> = emptyList(), // Negative impact on Bacteroides
     val additives: List<String> = emptyList(), // e.g., Emulsifiers
-    val mainPrebioticCompound: String = "" // e.g., "Beta-Glucan"
+    val mainPrebioticCompound: String = "", // e.g., "Beta-Glucan"
+    val sourceFound: String = "" // e.g., "USDA FoodData Central"
 )
 
 @Serializable

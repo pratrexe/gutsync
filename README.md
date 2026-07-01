@@ -4,10 +4,10 @@ GutSync is a minimalist, high-performance mobile health application designed to 
 
 ## 🌟 Key Features
 
-- **AI-Powered Meal Analysis**: Uses Groq AI (Llama 3.2 Vision & 3.3 Versatile) to extract nutritional components (Fiber, Polyphenols, etc.) from natural language meal descriptions and photos.
-- **Manual Food Logging**: A dedicated manual entry option for precise control over logged nutrients.
+- **AI-Powered Meal Analysis**: Uses **NVIDIA Llama 3.2 Vision 90B** to extract high-fidelity nutritional components (Fiber, Polyphenols, etc.) from meal photos.
 - **Microbe Impact Score**: A proprietary algorithm that calculates the impact of every meal based on AI-analyzed or manually entered data.
-- **Ask Gemini**: A dedicated tab for direct interaction with an AI microbiome expert.
+- **Ask Cooper**: A dedicated tab for direct interaction with a **Groq-powered** (Llama 3.3 70B) AI microbiome expert.
+- **Manual Food Logging**: A dedicated manual entry option for precise control over logged nutrients, including photo support.
 - **Biotic Density Tracking**: Visualizes the concentration of fibers, polyphenols, and fermented cultures in your diet.
 - **Longitudinal Trends**: Track shifts in your gut's "Pro-inflammatory" vs "Anti-inflammatory" states over weeks and months.
 - **Gut-Bites Library**: A curated collection of bite-sized educational modules explaining the science of the second brain.
@@ -16,7 +16,8 @@ GutSync is a minimalist, high-performance mobile health application designed to 
 
 - **UI**: Jetpack Compose (Material 3)
 - **Language**: Kotlin
-- **AI**: Groq AI (via Groq Cloud API), Google Gemini (via Firebase Vertex AI)
+- **Vision AI**: NVIDIA (Llama 3.2 90B Vision)
+- **Text AI**: Groq (Llama 3.3 70B Versatile)
 - **Image Loading**: Coil 3
 - **Icons**: Material Icons Extended
 - **Architecture**: MVVM (Model-View-ViewModel)
@@ -26,12 +27,16 @@ GutSync is a minimalist, high-performance mobile health application designed to 
 ### Prerequisites
 - Android Studio Ladybug (2024.2.1) or newer
 - Android SDK 37
-- A Firebase project with Vertex AI enabled
+- API Keys for **Groq** and **NVIDIA**
 
 ### Installation
 1. Clone the repository.
 2. Open the project in Android Studio.
-3. Connect your Firebase project (add `google-services.json` to the `app/` directory).
+3. Add your API keys to `local.properties`:
+   ```properties
+   GROQ_API_KEY=your_groq_key
+   NVIDIA_API_KEY=your_nvidia_key
+   ```
 4. Sync Gradle and run the `:app:assembleDebug` task.
 5. Deploy to an Android device or emulator running API 24+.
 
@@ -48,10 +53,10 @@ GutSync tracks specific "Microbiome-Active" compounds:
 
 ## 📁 Project Structure
 
-- `com.example.gutsync.data`: Contains the `MicrobeImpactCalculator` and data models.
-- `com.example.gutsync.ui.screens`: Jetpack Compose screens (Dashboard, Log, Trends, Insights).
+- `com.example.gutsync.data`: Contains the `MicrobeImpactCalculator`, AI clients, and data models.
+- `com.example.gutsync.ui.screens`: Jetpack Compose screens (Dashboard, Log, Trends, Insights, AI).
 - `com.example.gutsync.ui.theme`: Custom Material 3 theme with a high-contrast dark aesthetic.
-- `com.example.gutsync.GutSyncViewModel.kt`: Handles state and AI interaction.
+- `com.example.gutsync.GutSyncViewModel.kt`: Handles state, AI interaction, and business logic.
 
 ## 📝 License
 

@@ -46,7 +46,7 @@ fun AskGeminiScreen(session: AuthSession, viewModel: GutSyncViewModel = viewMode
     var question by remember { mutableStateOf("") }
     val currentSession by viewModel.currentSession.collectAsState()
     val chatHistory by viewModel.chatHistory.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.chatState.collectAsState()
     val listState = rememberLazyListState()
     
     var showHistory by remember { mutableStateOf(false) }
@@ -62,36 +62,13 @@ fun AskGeminiScreen(session: AuthSession, viewModel: GutSyncViewModel = viewMode
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Header
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp, bottom = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Surface(
-                    color = Color.White.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    Text(
-                        text = currentSession.summary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
             // Chat List
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 100.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 80.dp, end = 16.dp, bottom = 100.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (currentSession.messages.isEmpty() && uiState is UiState.Initial) {
@@ -135,27 +112,44 @@ fun AskGeminiScreen(session: AuthSession, viewModel: GutSyncViewModel = viewMode
             )
         }
 
-        // Floating Control Bar (Top Left)
+        // Unified Header (Top Left)
         Surface(
-            color = Color.Black,
+            color = Color.Black.copy(alpha = 0.8f),
             shape = RoundedCornerShape(24.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(top = 16.dp, start = 16.dp)
-                .width(100.dp)
         ) {
             Row(
-                modifier = Modifier.padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { showHistory = !showHistory }) {
-                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History", tint = Color.White)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { showHistory = !showHistory }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History", tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = { viewModel.startNewChat() }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Default.Add, contentDescription = "New Chat", tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
                 }
+
                 VerticalDivider(color = Color.White.copy(alpha = 0.2f), modifier = Modifier.height(24.dp))
-                IconButton(onClick = { viewModel.startNewChat() }) {
-                    Icon(Icons.Default.Add, contentDescription = "New Chat", tint = Color.White)
+
+                Surface(
+                    color = Color.White.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.padding(end = 4.dp)
+                ) {
+                    Text(
+                        text = currentSession.summary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }

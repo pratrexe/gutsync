@@ -245,17 +245,19 @@ fun MicrobeStatusCard(type: MicrobeType, percentage: Int, status: String, modifi
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    modifier = Modifier.width(80.dp)
+                    modifier = Modifier.weight(1f)
                 )
                 Surface(
                     color = if (status == "Low") SurfaceContainerHighest else MaterialTheme.colorScheme.surfaceVariant,
-                    shape = CircleShape
+                    shape = CircleShape,
+                    modifier = Modifier.padding(start = 4.dp)
                 ) {
                     Text(
                         text = status,
                         fontSize = 10.sp,
                         color = if (status == "Low") Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        maxLines = 1
                     )
                 }
             }
