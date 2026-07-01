@@ -40,14 +40,14 @@ object GroqClient {
             }
 
             val json = JSONObject().apply {
-                put("model", if (base64Image != null) "nvidia/llama-3.2-90b-vision-instruct" else model)
+                put("model", model)
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "user")
                         put("content", contentArray)
                     })
                 })
-                // Only add response_format for text-only requests
+                // Only add response_format for text-only requests (NVIDIA/Qwen might vary, safe to keep conditional)
                 if (isJson && base64Image == null) {
                     put("response_format", JSONObject().apply {
                         put("type", "json_object")

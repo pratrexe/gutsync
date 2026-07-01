@@ -4,23 +4,23 @@ GutSync is a minimalist, high-performance mobile health application designed to 
 
 ## 🌟 Key Features
 
-- **AI-Powered Meal Analysis**: Uses **NVIDIA Llama 3.2 Vision 90B** to extract high-fidelity nutritional components (Fiber, Polyphenols, etc.) from meal photos.
-- **Microbe Impact Score**: A proprietary algorithm that calculates the impact of every meal based on AI-analyzed or manually entered data.
-- **Ask Cooper**: A dedicated tab for direct interaction with a **Groq-powered** (Llama 3.3 70B) AI microbiome expert.
-- **Manual Food Logging**: A dedicated manual entry option for precise control over logged nutrients, including photo support.
-- **Biotic Density Tracking**: Visualizes the concentration of fibers, polyphenols, and fermented cultures in your diet.
-- **Longitudinal Trends**: Track shifts in your gut's "Pro-inflammatory" vs "Anti-inflammatory" states over weeks and months.
-- **Gut-Bites Library**: A curated collection of bite-sized educational modules explaining the science of the second brain.
+- **Advanced AI-Powered Meal Analysis**: Uses **Qwen3.5-397B-A17B (via NVIDIA)** for a multi-stage analysis pipeline:
+    1. **Visual Extraction**: Identifies food names, ingredients, portion sizes, brands, and even barcodes or nutrition label OCR from photos.
+    2. **Structured Search**: Routes data to **Open Food Facts** (for barcodes) or **USDA FoodData Central** for high-fidelity nutritional matching.
+    3. **Microbe Impact Engine**: Calculates precise shifts in Bifidobacterium, Lactobacillus, Akkermansia, and more.
+- **AI Explanation**: Qwen provides scientific reasoning for every score, explaining prebiotic/probiotic impact and diversity shifts.
+- **Manual Food Logging**: Precise manual entry with photo attachment support.
+- **Longitudinal Trends**: Track "Pro-inflammatory" vs "Anti-inflammatory" gut states over time.
+- **Google Drive Sync**: Secure, cross-device data backup via personal cloud storage.
 
 ## 🛠 Tech Stack
 
 - **UI**: Jetpack Compose (Material 3)
 - **Language**: Kotlin
-- **Vision AI**: NVIDIA (Llama 3.2 90B Vision)
-- **Text AI**: Groq (Llama 3.3 70B Versatile)
-- **Image Loading**: Coil 3
-- **Icons**: Material Icons Extended
-- **Architecture**: MVVM (Model-View-ViewModel)
+- **Primary AI**: NVIDIA Qwen3.5-397B-A17B (Multimodal)
+- **Fallback/Chat AI**: Groq Llama 3.3 70B
+- **Database**: USDA FoodData Central & Open Food Facts logic
+- **Storage**: Google Drive API + Local JSON
 
 ## 🚀 Getting Started
 

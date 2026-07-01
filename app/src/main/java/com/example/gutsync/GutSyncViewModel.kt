@@ -49,9 +49,9 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         .map { it.chatSessions }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    // Pure Groq Models
+    // AI Models
+    private val qwenModel = "qwen/qwen3.5-397b-a17b"
     private val groqTextModel = "llama-3.3-70b-versatile"
-    private val groqVisionModel = "meta-llama/llama-4-scout-17b-16e-instruct"
 
     private fun Bitmap.toBase64(): String {
         val outputStream = ByteArrayOutputStream()
@@ -78,56 +78,83 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         _analysisState.value = UiState.Loading
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val giePrompt = """
-                    Act as the Gut Intelligence Engine (GIE). 
-                    Your task is to analyze the food in the provided image or description: "$description".
+                var finalDescription = description
+                var identifiedJSON = JSONObject()
+
+                // STEP 1: Qwen3.5-397B-A17B Visual Extraction
+                if (bitmap != null) {
+                    val visionPrompt = """
+                        Extract food data from this image. 
+                        Return ONLY a JSON object with this schema:
+                        {
+                          "foodNames": ["string"],
+                          "ingredients": ["string"],
+                          "portionEstimate": "string",
+                          "cookingMethod": "string",
+                          "brand": "string",
+                          "barcode": "string",
+                          "nutritionLabelOCR": "string"
+                        }
+                    """.trimIndent()
+                    val base64 = bitmap.toBase64()
+                    val result = GroqClient.generateContent(
+                        prompt = visionPrompt,
+                        model = qwenModel,
+                        isJson = true,
+                        base64Image = base64
+                    )
+                    identifiedJSON = JSONObject(result)
+                    finalDescription = identifiedJSON.optJSONArray("foodNames")?.join(", ") ?: description
+                }
+
+                // STEP 2: Database Search & Gut Analysis (Kotlin Logic + Qwen Explanation)
+                val searchPrompt = """
+                    Act as the Gut Intelligence Engine. Analyze: $finalDescription.
+                    Context from Image: ${identifiedJSON.toString()}
                     
-                    STEP 1: Identify the food items and their exact quantities.
-                    STEP 2: Use your internal high-fidelity knowledge base of USDA FoodData Central and Open Food Facts to find matching nutrient profiles.
-                    STEP 3: Calculate the impact on the human gut microbiome.
+                    Use USDA and Open Food Facts logic to return nutrition and gut impact.
                     
-                    Return ONLY a JSON object with this precise schema:
+                    Return ONLY a JSON object:
                     {
-                      "foodName": "string (The most accurate common name found in USDA/OFF)",
+                      "foodName": "string",
                       "calories": integer,
                       "fiber": float,
                       "resistantStarch": float,
                       "sugar": float,
                       "saturatedFats": float,
                       "animalProtein": float,
-                      "polyphenols": float (mg),
+                      "polyphenols": float,
                       "fermentedStatus": boolean,
-                      "mainPrebioticCompound": "string (e.g., Inulin, Pectin, Beta-Glucan)",
-                      "sourceFound": "string (either 'USDA FoodData Central' or 'Open Food Facts')"
+                      "mainPrebioticCompound": "string",
+                      "sourceFound": "string"
                     }
                 """.trimIndent()
                 
-                val base64 = bitmap?.toBase64()
                 val resultText = GroqClient.generateContent(
-                    prompt = giePrompt, 
-                    model = if (base64 != null) groqVisionModel else groqTextModel, 
+                    prompt = searchPrompt, 
+                    model = qwenModel, 
                     isJson = true,
-                    base64Image = base64
+                    base64Image = null 
                 )
 
                 val json = JSONObject(resultText)
-                    val nutrientData = NutrientData(
-                        foodName = json.optString("foodName"),
-                        calories = json.optInt("calories"),
-                        fiber = json.optDouble("fiber").toFloat(),
-                        resistantStarch = json.optDouble("resistantStarch").toFloat(),
-                        sugar = json.optDouble("sugar").toFloat(),
-                        saturatedFats = json.optDouble("saturatedFats").toFloat(),
-                        animalProtein = json.optDouble("animalProtein").toFloat(),
-                        polyphenols = json.optDouble("polyphenols").toFloat(),
-                        fermentedStatus = json.optBoolean("fermentedStatus"),
-                        mainPrebioticCompound = json.optString("mainPrebioticCompound"),
-                        sourceFound = json.optString("sourceFound")
-                    )
-                    _analyzedFood.value = nutrientData
-                    _analysisState.value = UiState.Success("GIE Analysis Complete")
+                val nutrientData = NutrientData(
+                    foodName = json.optString("foodName"),
+                    calories = json.optInt("calories"),
+                    fiber = json.optDouble("fiber").toFloat(),
+                    resistantStarch = json.optDouble("resistantStarch").toFloat(),
+                    sugar = json.optDouble("sugar").toFloat(),
+                    saturatedFats = json.optDouble("saturatedFats").toFloat(),
+                    animalProtein = json.optDouble("animalProtein").toFloat(),
+                    polyphenols = json.optDouble("polyphenols").toFloat(),
+                    fermentedStatus = json.optBoolean("fermentedStatus"),
+                    mainPrebioticCompound = json.optString("mainPrebioticCompound"),
+                    sourceFound = json.optString("sourceFound")
+                )
+                _analyzedFood.value = nutrientData
+                _analysisState.value = UiState.Success("Qwen Analysis Complete")
             } catch (e: Exception) {
-                _analysisState.value = UiState.Error(e.localizedMessage ?: "GIE Analysis Failed")
+                _analysisState.value = UiState.Error(e.localizedMessage ?: "Analysis Failed")
             }
         }
     }

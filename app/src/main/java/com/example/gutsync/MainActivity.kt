@@ -189,7 +189,7 @@ fun MainNavigation(
         NavigationItem("Home", Icons.Default.Home),
         NavigationItem("Log", Icons.Default.AddCircle),
         NavigationItem("Trends", Icons.Default.BarChart),
-        NavigationItem("AI", Icons.Default.AutoAwesome),
+        NavigationItem("Cooper", Icons.Default.AutoAwesome),
         NavigationItem("Settings", Icons.Default.Settings)
     )
 
@@ -234,7 +234,7 @@ fun MainNavigation(
                     )
                     1 -> MealLoggerScreen(viewModel = viewModel)
                     2 -> TrendsScreen(viewModel = viewModel)
-                    3 -> AskGeminiScreen(session = session, viewModel = viewModel)
+                    3 -> AskCooperScreen(session = session, viewModel = viewModel)
                     4 -> SettingsScreen(
                         session = session,
                         onConnectDrive = onConnectDrive,

@@ -42,7 +42,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun AskGeminiScreen(session: AuthSession, viewModel: GutSyncViewModel = viewModel()) {
+fun AskCooperScreen(session: AuthSession, viewModel: GutSyncViewModel = viewModel()) {
     var question by remember { mutableStateOf("") }
     val currentSession by viewModel.currentSession.collectAsState()
     val chatHistory by viewModel.chatHistory.collectAsState()
