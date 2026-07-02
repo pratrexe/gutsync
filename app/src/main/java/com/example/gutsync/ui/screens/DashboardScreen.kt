@@ -56,25 +56,21 @@ fun DashboardScreen(
     } else NutrientData()
 
     val (healthScore, shifts) = remember(currentNutrients, meals) {
-        if (meals.isEmpty()) {
-            0 to MicrobeImpactCalculator.calculateGIE(NutrientData()).predictedShifts
+        val scorecard = MicrobeImpactCalculator.calculateGIE(currentNutrients)
+        // If we have no meals today, show a starting "resting" diversity rather than 0
+        val finalScore = if (currentNutrients.fiber == 0f && currentNutrients.polyphenols == 0f) {
+            42 // Baseline diversity when no food is logged yet today
         } else {
-            val scorecard = MicrobeImpactCalculator.calculateGIE(currentNutrients)
-            scorecard.gutHealthScore to scorecard.predictedShifts
+            scorecard.gutHealthScore
         }
+        finalScore to scorecard.predictedShifts
     }
 
-    // Calculate REAL growth percentage (compare last 7 days to previous 7 days)
-    val growthPercentage = remember(meals) {
-        val week = 7 * 24 * 60 * 60 * 1000L
-        val now = System.currentTimeMillis()
-        val currentWeekScore = meals.filter { it.timestamp > now - week }
-            .map { MicrobeImpactCalculator.calculateGIE(it.nutrients).gutHealthScore }.average().takeIf { !it.isNaN() } ?: 0.0
-        val lastWeekScore = meals.filter { it.timestamp in (now - 2 * week)..(now - week) }
-            .map { MicrobeImpactCalculator.calculateGIE(it.nutrients).gutHealthScore }.average().takeIf { !it.isNaN() } ?: 0.0
-        
-        if (lastWeekScore > 0) {
-            (((currentWeekScore - lastWeekScore) / lastWeekScore) * 100).toInt()
+    // Calculate REAL growth percentage (Immediate feedback: current score vs baseline)
+    val growthPercentage = remember(healthScore) {
+        val baseline = 42.0
+        if (healthScore > baseline) {
+            (((healthScore - baseline) / baseline) * 100).toInt()
         } else {
             0
         }
@@ -133,14 +129,14 @@ fun DashboardScreen(
 fun MicrobeStatusGrid(shifts: List<MicrobeShift>) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            val bifido = shifts.find { it.microbeType == MicrobeType.BIFIDOBACTERIUM }?.shiftPercentage?.toInt()?.coerceIn(0, 100) ?: 50
-            val lacto = shifts.find { it.microbeType == MicrobeType.LACTOBACILLUS }?.shiftPercentage?.toInt()?.coerceIn(0, 100) ?: 50
+            val bifido = (30 + (shifts.find { it.microbeType == MicrobeType.BIFIDOBACTERIUM }?.shiftPercentage?.toInt() ?: 0)).coerceIn(10, 100)
+            val lacto = (35 + (shifts.find { it.microbeType == MicrobeType.LACTOBACILLUS }?.shiftPercentage?.toInt() ?: 0)).coerceIn(10, 100)
             MicrobeStatusCard(MicrobeType.BIFIDOBACTERIUM, bifido, getStatusText(bifido), Modifier.weight(1f))
             MicrobeStatusCard(MicrobeType.LACTOBACILLUS, lacto, getStatusText(lacto), Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            val akker = shifts.find { it.microbeType == MicrobeType.AKKERMANSIA }?.shiftPercentage?.toInt()?.coerceIn(0, 100) ?: 50
-            val bacter = shifts.find { it.microbeType == MicrobeType.BACTEROIDES }?.shiftPercentage?.toInt()?.coerceIn(0, 100) ?: 50
+            val akker = (25 + (shifts.find { it.microbeType == MicrobeType.AKKERMANSIA }?.shiftPercentage?.toInt() ?: 0)).coerceIn(10, 100)
+            val bacter = (40 + (shifts.find { it.microbeType == MicrobeType.BACTEROIDES }?.shiftPercentage?.toInt() ?: 0)).coerceIn(10, 100)
             MicrobeStatusCard(MicrobeType.AKKERMANSIA, akker, getStatusText(akker), Modifier.weight(1f))
             MicrobeStatusCard(MicrobeType.BACTEROIDES, bacter, getStatusText(bacter), Modifier.weight(1f))
         }

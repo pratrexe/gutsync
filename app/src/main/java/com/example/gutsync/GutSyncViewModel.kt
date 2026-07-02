@@ -105,14 +105,17 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val nutrientData = OFFClient.getProductByBarcode(barcode)
-                if (nutrientData != null) {
-                    _openRouterExplanation.value = null // No AI explanation for barcode
-                    _analyzedFood.value = nutrientData
-                    _analysisState.value = UiState.Success("Barcode Analysis Complete")
+                
+                if (nutrientData != null && nutrientData.foodName != "Unknown Product") {
+                    // Even if OFF has data, we route through analyzeFood to get the 
+                    // deep microbiome insights (polyphenols, resistant starch, etc.) and AI explanation
+                    // This ensures "gut bacterias" are calculated using Groq's broader knowledge.
+                    analyzeFood(nutrientData.foodName)
                 } else {
-                    _analysisState.value = UiState.Error("Product not found in Open Food Facts database.")
+                    _analysisState.value = UiState.Error("Product not found in Open Food Facts.")
                 }
             } catch (e: Exception) {
+                Log.e("GutSyncViewModel", "Barcode Error", e)
                 _analysisState.value = UiState.Error("Barcode search failed: ${e.localizedMessage}")
             }
         }
@@ -289,7 +292,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val modelToUse = if (_currentSession.value.preferredModel == "OpenRouter") gemmaModel else groqTextModel
-                val prompt = "You are a friendly microbiome health expert named Cooper. Answer concisely: $question. No markdown."
+                val prompt = "You are a friendly microbiome health expert named Maya. Answer concisely: $question. No markdown. your developer is pratyush rai"
                 val base64 = bitmap?.toBase64()
                 
                 val modelMsg = ChatMessage(text = "", role = MessageRole.MODEL)
@@ -368,6 +371,15 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
             } catch (e: Exception) {
                 e.printStackTrace()
                 onComplete(null, e.localizedMessage ?: "Drive synchronization failed")
+            }
+        }
+    }
+
+    fun importFromCsv(context: Context, uri: android.net.Uri) {
+        viewModelScope.launch {
+            val meals = com.example.gutsync.data.storage.CsvHelper.importMealsFromCsv(context, uri)
+            if (meals.isNotEmpty()) {
+                repository.importMeals(meals)
             }
         }
     }

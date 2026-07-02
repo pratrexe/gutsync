@@ -3,6 +3,7 @@ package com.example.gutsync.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -26,8 +27,16 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
 import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.data.auth.AuthSession
+import com.example.gutsync.data.storage.CsvHelper
 import com.example.gutsync.ui.theme.SurfaceContainerLow
 import com.example.gutsync.ui.theme.SurfaceContainerLowest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Context
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
+import java.io.File
+import java.io.FileOutputStream
 
 @Composable
 fun SettingsScreen(
@@ -38,10 +47,32 @@ fun SettingsScreen(
 ) {
     val appData by viewModel.appData.collectAsState()
     val profile = appData.profile
+    val context = LocalContext.current
 
     var fiberGoal by remember(profile.fiberGoal) { mutableStateOf(profile.fiberGoal.toString()) }
     var polyphenolGoal by remember(profile.polyphenolGoal) { mutableStateOf(profile.polyphenolGoal.toString()) }
     var starchGoal by remember(profile.resistantStarchGoal) { mutableStateOf(profile.resistantStarchGoal.toString()) }
+
+    val csvImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.importFromCsv(context, it) }
+    }
+
+    val csvExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        uri?.let {
+            try {
+                val csvData = CsvHelper.exportMealsToCsv(appData.meals)
+                context.contentResolver.openOutputStream(it)?.use { stream ->
+                    stream.write(csvData.toByteArray())
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -160,28 +191,58 @@ fun SettingsScreen(
                 shape = RoundedCornerShape(20.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier.padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Icon(
-                        imageVector = if (session.isDriveConnected) Icons.Default.Cloud else Icons.Default.CloudOff,
-                        contentDescription = null,
-                        tint = if (session.isDriveConnected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (session.isDriveConnected) "Cloud Sync Active" else "Local Only",
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
+                Column {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (session.isDriveConnected) Icons.Default.Cloud else Icons.Default.CloudOff,
+                            contentDescription = null,
+                            tint = if (session.isDriveConnected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
                         )
-                        Text(
-                            text = if (session.isDriveConnected) "Data synced with Google Drive" else "Sync with Drive to save history",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (session.isDriveConnected) "Cloud Sync Active" else "Local Only",
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = if (session.isDriveConnected) "Data synced with Google Drive" else "Sync with Drive to save history",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(horizontal = 20.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { csvExportLauncher.launch("gutsync_meals_${System.currentTimeMillis()}.csv") }
+                            .padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        Text("Export Data as CSV", color = Color.White, fontSize = 14.sp)
+                    }
+
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(horizontal = 20.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { csvImportLauncher.launch(arrayOf("text/comma-separated-values", "text/csv")) }
+                            .padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(Icons.Default.FileUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        Text("Import Data from CSV", color = Color.White, fontSize = 14.sp)
                     }
                 }
             }
@@ -214,6 +275,22 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Text("Sign Out", fontWeight = FontWeight.SemiBold)
                 }
+            }
+        }
+
+        item {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Text(
+                    text = "Made by Pratyush Rai",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
 

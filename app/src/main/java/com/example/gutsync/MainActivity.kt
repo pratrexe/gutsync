@@ -45,6 +45,7 @@ import com.example.gutsync.data.auth.AuthSession
 import com.example.gutsync.data.auth.GoogleAuthHelper
 import com.example.gutsync.data.auth.SessionManager
 import com.example.gutsync.ui.components.LiquidBackground
+import com.example.gutsync.ui.components.GutsyncLoadingAnimation
 import com.example.gutsync.ui.screens.*
 import com.example.gutsync.ui.theme.GutsyncTheme
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -133,7 +134,7 @@ class MainActivity : ComponentActivity() {
                     
                     if (isCheckingAuth) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Color.White)
+                            GutsyncLoadingAnimation()
                         }
                     } else if (currentSession.isLoggedIn) {
                         MainNavigation(
@@ -190,7 +191,7 @@ fun MainNavigation(
         NavigationItem("Home", Icons.Default.Home),
         NavigationItem("Log", Icons.Default.AddCircle),
         NavigationItem("Trends", Icons.Default.BarChart),
-        NavigationItem("Cooper", Icons.Default.AutoAwesome),
+        NavigationItem("Maya", Icons.Default.AutoAwesome),
         NavigationItem("Settings", Icons.Default.Settings)
     )
 
@@ -202,9 +203,15 @@ fun MainNavigation(
         label = "nav_offset"
     )
 
-    val nestedScrollConnection = remember {
+    val nestedScrollConnection = remember(selectedTab) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Do not hide the "pill" navigation in the AI chatting page
+                if (selectedTab == 3) {
+                    if (!navVisible) navVisible = true
+                    return Offset.Zero
+                }
+
                 if (available.y < -15) {
                     if (navVisible) navVisible = false
                 } else if (available.y > 15) {
@@ -213,6 +220,11 @@ fun MainNavigation(
                 return Offset.Zero
             }
         }
+    }
+
+    // Ensure nav is visible when entering Cooper screen
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 3) navVisible = true
     }
 
     Box(

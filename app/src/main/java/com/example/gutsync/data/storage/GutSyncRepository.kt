@@ -162,4 +162,13 @@ class GutSyncRepository(private val context: Context) {
         _appData.value = _appData.value.copy(profile = profile)
         saveData()
     }
+
+    suspend fun importMeals(meals: List<MealLogEntry>) {
+        val currentMeals = _appData.value.meals.toMutableList()
+        currentMeals.addAll(meals)
+        // Sort by timestamp to keep them chronological
+        val sortedMeals = currentMeals.sortedBy { it.timestamp }
+        _appData.value = _appData.value.copy(meals = sortedMeals)
+        saveData()
+    }
 }

@@ -111,7 +111,7 @@ fun AskCooperScreen(session: AuthSession, viewModel: GutSyncViewModel = viewMode
                 if (currentSession.messages.isEmpty() && uiState is UiState.Initial) {
                     item {
                         Text(
-                            text = "Ask Cooper anything about your microbiome. Example: 'How does spinach affect Akkermansia?'",
+                            text = "Ask Maya anything about your microbiome. Example: 'How does spinach affect Akkermansia?'",
                             color = Color.Gray,
                             fontSize = 16.sp,
                             modifier = Modifier.padding(20.dp)
@@ -326,9 +326,9 @@ fun ChatBubble(message: ChatMessage, session: AuthSession) {
                         .background(Color.DarkGray, CircleShape)
                         .padding(4.dp)
                 )
-                Text(text = "Cooper", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(text = "Maya", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             } else {
-                Text(text = "Me", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(text = session.displayName ?: "Me", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 if (session.photoUrl != null) {
                     Image(
                         painter = rememberAsyncImagePainter(session.photoUrl),
@@ -387,7 +387,7 @@ fun ErrorBubble(error: String) {
                 tint = Color.White,
                 modifier = Modifier.size(24.dp).background(Color.DarkGray, CircleShape).padding(4.dp)
             )
-            Text(text = "Cooper", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(text = "Maya", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
         Surface(
             color = Color(0xFFFEE2E2), // Very light red
@@ -430,7 +430,7 @@ fun LoadingBubble() {
                 tint = Color.White,
                 modifier = Modifier.size(24.dp).background(Color.DarkGray, CircleShape).padding(4.dp)
             )
-            Text(text = "Cooper", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(text = "Maya", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
         Surface(
             color = Color.White,

@@ -43,6 +43,7 @@ import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.UiState
 import com.example.gutsync.data.MicrobeImpactCalculator
 import com.example.gutsync.data.NutrientData
+import com.example.gutsync.ui.components.GutsyncLoadingAnimation
 import com.example.gutsync.ui.theme.SurfaceContainerLow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.io.File
@@ -262,9 +263,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
 
         item {
             if (uiState is UiState.Loading) {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.White)
-                }
+                GutsyncLoadingAnimation()
             } else if (analyzedFood != null) {
                 Button(
                     onClick = { viewModel.addAnalyzedFood(); searchQuery = ""; quantityInput = "100" },
