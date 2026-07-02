@@ -1,31 +1,30 @@
 package com.example.gutsync.ui.screens
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
-import com.example.gutsync.data.auth.AccountType
+import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.data.auth.AuthSession
 import com.example.gutsync.ui.theme.SurfaceContainerLow
 import com.example.gutsync.ui.theme.SurfaceContainerLowest
@@ -34,8 +33,16 @@ import com.example.gutsync.ui.theme.SurfaceContainerLowest
 fun SettingsScreen(
     session: AuthSession,
     onConnectDrive: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    viewModel: GutSyncViewModel = viewModel()
 ) {
+    val appData by viewModel.appData.collectAsState()
+    val profile = appData.profile
+
+    var fiberGoal by remember(profile.fiberGoal) { mutableStateOf(profile.fiberGoal.toString()) }
+    var polyphenolGoal by remember(profile.polyphenolGoal) { mutableStateOf(profile.polyphenolGoal.toString()) }
+    var starchGoal by remember(profile.resistantStarchGoal) { mutableStateOf(profile.resistantStarchGoal.toString()) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -88,6 +95,60 @@ fun SettingsScreen(
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+
+        // Goal Setting Card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        text = "DAILY TARGETS",
+                        fontSize = 12.sp,
+                        letterSpacing = 1.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    GoalInputRow(
+                        label = "Fiber Goal (g)",
+                        value = fiberGoal,
+                        onValueChange = { fiberGoal = it }
+                    )
+
+                    GoalInputRow(
+                        label = "Polyphenol Goal (mg)",
+                        value = polyphenolGoal,
+                        onValueChange = { polyphenolGoal = it }
+                    )
+
+                    GoalInputRow(
+                        label = "Resistant Starch (g)",
+                        value = starchGoal,
+                        onValueChange = { starchGoal = it }
+                    )
+
+                    Button(
+                        onClick = {
+                            viewModel.updateGoals(
+                                fiber = fiberGoal.toIntOrNull() ?: 30,
+                                polyphenols = polyphenolGoal.toIntOrNull() ?: 500,
+                                starch = starchGoal.toIntOrNull() ?: 15
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f), contentColor = Color.White),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Save Targets", fontSize = 14.sp)
+                    }
                 }
             }
         }
@@ -157,5 +218,30 @@ fun SettingsScreen(
         }
 
         item { Spacer(modifier = Modifier.height(100.dp)) }
+    }
+}
+
+@Composable
+fun GoalInputRow(label: String, value: String, onValueChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, color = Color.White, fontSize = 14.sp)
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.width(100.dp),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color.White,
+                unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+            ),
+            singleLine = true,
+            shape = RoundedCornerShape(8.dp)
+        )
     }
 }

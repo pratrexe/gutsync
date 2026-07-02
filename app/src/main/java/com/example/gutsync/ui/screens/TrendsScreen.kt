@@ -14,32 +14,84 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.data.MicrobeImpactCalculator
+import com.example.gutsync.data.NutrientData
 import com.example.gutsync.ui.theme.SurfaceContainerLow
 import com.example.gutsync.ui.theme.SurfaceContainerLowest
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun TrendsScreen(viewModel: GutSyncViewModel = viewModel()) {
     var selectedView by remember { mutableStateOf("Weekly") }
     val appData by viewModel.appData.collectAsState()
     
-    // Calculate real trends from meal history
-    val recentMeals = appData.meals.takeLast(7)
-    val trendData = recentMeals.map { log ->
-        val scorecard = MicrobeImpactCalculator.calculateGIE(log.nutrients)
-        val pro = (scorecard.gutHealthScore / 100f).coerceIn(0.1f, 0.9f)
-        pro to (1f - pro)
-    }.toMutableList()
+    val meals = appData.meals
     
-    // Pad with placeholders if less than 7 meals
-    while (trendData.size < 7) {
-        trendData.add(0, 0.5f to 0.5f)
+    // Process Data for Graphs
+    val graphData = remember(meals, selectedView) {
+        val calendar = Calendar.getInstance()
+        val now = calendar.timeInMillis
+        
+        if (selectedView == "Weekly") {
+            // Weekly: Last 7 days
+            (0 until 7).map { daysAgo ->
+                val dayCalendar = Calendar.getInstance().apply {
+                    add(Calendar.DAY_OF_YEAR, -daysAgo)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                val dayStart = dayCalendar.timeInMillis
+                val dayEnd = dayStart + (24 * 60 * 60 * 1000)
+                
+                val dayMeals = meals.filter { it.timestamp in dayStart until dayEnd }
+                val dayNutrients = NutrientData(
+                    fiber = dayMeals.sumOf { it.nutrients.fiber.toDouble() }.toFloat(),
+                    polyphenols = dayMeals.sumOf { it.nutrients.polyphenols.toDouble() }.toFloat(),
+                    sugar = dayMeals.sumOf { it.nutrients.sugar.toDouble() }.toFloat(),
+                    saturatedFats = dayMeals.sumOf { it.nutrients.saturatedFats.toDouble() }.toFloat(),
+                    fermentedStatus = dayMeals.any { it.nutrients.fermentedStatus }
+                )
+                
+                val scorecard = MicrobeImpactCalculator.calculateGIE(dayNutrients)
+                val healthScore = if (dayMeals.isEmpty()) 0f else scorecard.gutHealthScore.toFloat()
+                
+                // Return data for the graph (reversed later)
+                val dayLabel = when(daysAgo) {
+                    0 -> "Today"
+                    1 -> "Yesterday"
+                    else -> SimpleDateFormat("E", Locale.getDefault()).format(dayCalendar.time)
+                }
+                dayLabel to (healthScore / 100f).coerceIn(0f, 1f)
+            }.reversed()
+        } else {
+            // Monthly: Last 4 weeks (simplified as 30 days grouped by 5-day periods)
+            (0 until 6).map { periodIndex ->
+                val daysAgoStart = periodIndex * 5
+                val daysAgoEnd = (periodIndex + 1) * 5
+                
+                val periodMeals = meals.filter { 
+                    val mealDaysAgo = ((now - it.timestamp) / (24 * 60 * 60 * 1000)).toInt()
+                    mealDaysAgo in daysAgoStart until daysAgoEnd
+                }
+                
+                val periodScore = if (periodMeals.isEmpty()) 0f else {
+                    periodMeals.map { MicrobeImpactCalculator.calculateGIE(it.nutrients).gutHealthScore }
+                        .average().toFloat()
+                }
+                
+                "P${6-periodIndex}" to (periodScore / 100f).coerceIn(0f, 1f)
+            }.reversed()
+        }
     }
 
     LazyColumn(
@@ -72,20 +124,20 @@ fun TrendsScreen(viewModel: GutSyncViewModel = viewModel()) {
             }
         }
 
-        // Biological Insight Card (REAL DATA)
+        // Biological Insight Card
         item {
-            val mostImpactedMicrobe = appData.meals.takeLast(10)
+            val mostImpactedMicrobe = appData.meals.takeLast(20)
                 .flatMap { MicrobeImpactCalculator.calculateGIE(it.nutrients).predictedShifts }
                 .groupBy { it.microbeType }
                 .mapValues { it.value.sumOf { shift -> shift.shiftPercentage.toDouble() } }
                 .maxByOrNull { it.value }
             
             val insightText = if (mostImpactedMicrobe != null && mostImpactedMicrobe.value > 0) {
-                "Your ${mostImpactedMicrobe.key.displayName} levels are trending upward based on your recent logs."
-            } else if (recentMeals.isEmpty()) {
-                "Start logging your meals to see biological insights."
+                "Your ${mostImpactedMicrobe.key.displayName} family is showing the strongest positive growth this period."
+            } else if (meals.isEmpty()) {
+                "Your gut health tracking is currently empty. Log your first meal to start calculating biological trends."
             } else {
-                "Your gut microbiome is stabilizing across all core families."
+                "Your gut microbiome is stabilizing. Maintain diverse fiber intake for optimal stability."
             }
 
             Card(
@@ -109,7 +161,7 @@ fun TrendsScreen(viewModel: GutSyncViewModel = viewModel()) {
             }
         }
 
-        // Visualization Card
+        // Visualization Card (REAL DATA GRAPH)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
@@ -124,13 +176,10 @@ fun TrendsScreen(viewModel: GutSyncViewModel = viewModel()) {
                         verticalAlignment = Alignment.Bottom
                     ) {
                         Column {
-                            Text(text = "Metabolic State", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(text = "Comparison", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text(text = "Gut Health Score", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = "$selectedView Progress", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            LegendItem("Pro", Color.White)
-                            LegendItem("Anti", Color(0xFF474747))
-                        }
+                        LegendItem("Score", Color.White)
                     }
                     
                     Spacer(modifier = Modifier.height(32.dp))
@@ -141,27 +190,57 @@ fun TrendsScreen(viewModel: GutSyncViewModel = viewModel()) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Bottom
                     ) {
-                        val labels = if (selectedView == "Weekly") listOf("M", "T", "W", "T", "F", "S", "S") else listOf("W1", "W2", "W3", "W4", "W5", "W6", "W7")
-                        
-                        trendData.forEachIndexed { index, (pro, anti) ->
-                            BarColumn(labels[index], pro, anti)
+                        graphData.forEach { (label, progress) ->
+                            TrendBar(label, progress)
                         }
                     }
                 }
             }
         }
 
-        // Secondary Stats (REAL DATA)
+        // Cumulative Stats
         item {
-            val totalFiber = recentMeals.sumOf { it.nutrients.fiber.toInt() }
-            val totalPolyphenols = recentMeals.sumOf { it.nutrients.polyphenols.toInt() }
+            val weekMillis = 7 * 24 * 60 * 60 * 1000L
+            val weekMeals = meals.filter { it.timestamp > System.currentTimeMillis() - weekMillis }
+            val avgFiber = if(weekMeals.isEmpty()) 0 else weekMeals.sumOf { it.nutrients.fiber.toInt() } / 7
+            val avgPoly = if(weekMeals.isEmpty()) 0 else weekMeals.sumOf { it.nutrients.polyphenols.toInt() } / 7
+            
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard("Fiber Intake", "${totalFiber}g", (totalFiber / 35f).coerceAtMost(1f), Modifier.weight(1f))
-                StatCard("Polyphenols", "${totalPolyphenols}mg", (totalPolyphenols / 1000f).coerceAtMost(1f), Modifier.weight(1f))
+                StatCard("Daily Avg Fiber", "${avgFiber}g", (avgFiber / 35f).coerceAtMost(1f), Modifier.weight(1f))
+                StatCard("Daily Avg Poly", "${avgPoly}mg", (avgPoly / 1000f).coerceAtMost(1f), Modifier.weight(1f))
             }
         }
 
         item { Spacer(modifier = Modifier.height(100.dp)) }
+    }
+}
+
+@Composable
+fun TrendBar(label: String, progress: Float) {
+    val animatedProgress by animateFloatAsState(targetValue = progress)
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            modifier = Modifier
+                .width(24.dp)
+                .fillMaxHeight(0.8f)
+                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                .background(Color.White.copy(alpha = 0.05f)),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(animatedProgress)
+                    .background(Color.White)
+            )
+        }
+        Text(
+            text = label.take(3), 
+            fontSize = 10.sp, 
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
@@ -190,20 +269,6 @@ fun LegendItem(label: String, color: Color) {
 }
 
 @Composable
-fun BarColumn(label: String, pro: Float, anti: Float) {
-    val animatedPro by animateFloatAsState(targetValue = pro)
-    val animatedAnti by animateFloatAsState(targetValue = anti)
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(modifier = Modifier.height(160.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            Box(modifier = Modifier.width(12.dp).fillMaxHeight(animatedPro).background(Color.White))
-            Box(modifier = Modifier.width(12.dp).fillMaxHeight(animatedAnti).background(Color(0xFF474747)))
-        }
-        Text(text = label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
 fun StatCard(label: String, value: String, progress: Float, modifier: Modifier = Modifier) {
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
@@ -213,7 +278,7 @@ fun StatCard(label: String, value: String, progress: Float, modifier: Modifier =
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(text = label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(text = value, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+            Text(text = value, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
             Spacer(modifier = Modifier.height(4.dp))
             LinearProgressIndicator(
                 progress = { progress },

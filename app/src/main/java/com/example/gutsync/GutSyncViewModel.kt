@@ -159,10 +159,10 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         _analysisState.value = UiState.Loading
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Directly use AI for analysis as requested (forgetting OFF/USDA)
+                // STEP 1: Use Groq (Llama 70B) for high-speed nutritional lookup based on the name/description
                 val searchPrompt = """
-                    Act as the Gut Intelligence Engine. Analyze: $description for $quantityGrams grams.
-                    Return ONLY a JSON object with nutrition for EXACTLY $quantityGrams grams:
+                    Act as the Gut Intelligence Engine. Analyze the food: $description for EXACTLY $quantityGrams grams.
+                    Return ONLY a JSON object with this schema:
                     {
                       "foodName": "string",
                       "calories": integer,
@@ -178,17 +178,24 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                       "fermentedStatus": boolean,
                       "additives": ["string"],
                       "mainPrebioticCompound": "string",
-                      "sourceFound": "Gemma AI"
+                      "sourceFound": "Groq Llama 3.3 70B"
                     }
                 """.trimIndent()
                 
                 val resultText = GroqClient.generateContent(
                     prompt = searchPrompt, 
-                    model = gemmaModel, 
+                    model = groqTextModel, 
                     isJson = true
                 )
 
-                val json = JSONObject(resultText)
+                // Robust JSON extraction
+                val jsonStart = resultText.indexOf("{")
+                val jsonEnd = resultText.lastIndexOf("}")
+                val cleanJsonStr = if (jsonStart != -1 && jsonEnd != -1) {
+                    resultText.substring(jsonStart, jsonEnd + 1)
+                } else resultText
+
+                val json = JSONObject(cleanJsonStr)
                 val nutrientData = NutrientData(
                     foodName = json.optString("foodName"),
                     calories = json.optInt("calories"),
@@ -216,6 +223,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 
                 val scorecard = MicrobeImpactCalculator.calculateGIE(nutrientData)
                 
+                // STEP 2: Use Gemma (OpenRouter) for the scientific explanation (high reasoning)
                 val explanationPrompt = """
                     Explain this Gut Health Score: ${scorecard.gutHealthScore}/100 for $quantityGrams grams of ${nutrientData.foodName}.
                     Microbe Shifts: ${scorecard.predictedShifts.joinToString { shift -> "${shift.microbeType.displayName}: ${shift.shiftPercentage}%" }}
@@ -309,6 +317,17 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 Log.e("GutSyncViewModel", "Chat Error", e)
                 _chatState.value = UiState.Error(e.localizedMessage ?: "Expert unavailable")
             }
+        }
+    }
+
+    fun updateGoals(fiber: Int, polyphenols: Int, starch: Int) {
+        val updatedProfile = appData.value.profile.copy(
+            fiberGoal = fiber,
+            polyphenolGoal = polyphenols,
+            resistantStarchGoal = starch
+        )
+        viewModelScope.launch {
+            repository.updateProfile(updatedProfile)
         }
     }
 

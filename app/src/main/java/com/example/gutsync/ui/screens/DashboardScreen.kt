@@ -98,6 +98,18 @@ fun DashboardScreen(
             GoalCard(label = "Fiber Intake", current = currentNutrients.fiber.toInt(), goal = appData.profile.fiberGoal)
         }
 
+        // Starch & Polyphenol Progress
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Box(modifier = Modifier.weight(1f)) {
+                    MiniGoalCard("Starch", currentNutrients.resistantStarch.toInt(), appData.profile.resistantStarchGoal)
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    MiniGoalCard("Polyphenols", currentNutrients.polyphenols.toInt(), appData.profile.polyphenolGoal)
+                }
+            }
+        }
+
         // Microbe Status Grid (REAL DATA)
         item {
             MicrobeStatusGrid(shifts)
@@ -139,6 +151,29 @@ fun getStatusText(percentage: Int) = when {
     percentage < 30 -> "Low"
     percentage < 70 -> "Moderate"
     else -> "Optimal"
+}
+
+@Composable
+fun MiniGoalCard(label: String, current: Int, goal: Int) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(label.uppercase(), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${current} / ${goal}${if(label == "Polyphenols") "mg" else "g"}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Spacer(modifier = Modifier.height(8.dp))
+            LinearProgressIndicator(
+                progress = { if (goal > 0) current.toFloat() / goal else 0f },
+                modifier = Modifier.fillMaxWidth().height(4.dp),
+                color = Color.White,
+                trackColor = SurfaceContainerHighest,
+                strokeCap = StrokeCap.Round
+            )
+        }
+    }
 }
 
 @Composable
