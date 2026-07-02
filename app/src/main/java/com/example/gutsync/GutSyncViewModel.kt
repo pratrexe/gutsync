@@ -59,11 +59,10 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // AI Models
-    private val gemmaModel = "google/gemma-4-31b-it"
+    private val gemmaModel = "google/gemma-4-31b-it:free"
     private val groqTextModel = "llama-3.3-70b-versatile"
 
     private fun Bitmap.toBase64(): String {
-        // Scale down to 1024px width for better recognition without massive payloads
         val scaled = Bitmap.createScaledBitmap(this, 1024, (height * 1024f / width).toInt(), true)
         val outputStream = ByteArrayOutputStream()
         scaled.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
@@ -73,6 +72,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
     fun setCapturedImage(bitmap: Bitmap?) {
         _capturedImage.value = bitmap
         _analyzedFood.value = null
+        _identifiedFoodName.value = null
     }
 
     fun setChatImage(bitmap: Bitmap?) {
@@ -105,12 +105,10 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val nutrientData = OFFClient.getProductByBarcode(barcode)
                 if (nutrientData != null) {
-                    // Get a scientific explanation from OpenRouter based on the database data
                     val scorecard = MicrobeImpactCalculator.calculateGIE(nutrientData)
                     val explanationPrompt = """
                         Explain this Gut Health Score for ${nutrientData.foodName}: ${scorecard.gutHealthScore}/100.
                         Nutrients (from Open Food Facts): Fiber: ${nutrientData.fiber}g, Sugar: ${nutrientData.sugar}g.
-                        
                         Mention impact on Bifidobacterium, Lactobacillus, Akkermansia, and Bacteroides.
                         Keep it concise and scientific. No markdown.
                     """.trimIndent()
@@ -161,122 +159,67 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         _analysisState.value = UiState.Loading
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                var finalDescription = description
-                var identifiedJSON = JSONObject()
-                var barcode: String? = null
-
-                // STEP 1: OpenRouter Visual Extraction
-                if (bitmap != null) {
-                    val visionPrompt = """
-                        Extract food data from this image. 
-                        Return ONLY a JSON object with this schema:
-                        {
-                          "foodNames": ["string"],
-                          "ingredients": ["string"],
-                          "portionEstimate": "string",
-                          "cookingMethod": "string",
-                          "brand": "string",
-                          "barcode": "string",
-                          "nutritionLabelOCR": "string"
-                        }
-                    """.trimIndent()
-                    val base64 = bitmap.toBase64()
-                    val result = GroqClient.generateContent(
-                        prompt = visionPrompt,
-                        model = gemmaModel,
-                        isJson = true,
-                        base64Image = base64
-                    )
-                    identifiedJSON = JSONObject(result)
-                    finalDescription = identifiedJSON.optJSONArray("foodNames")?.join(", ") ?: description
-                    barcode = identifiedJSON.optString("barcode").takeIf { it.isNotBlank() && it != "null" }
-                }
-
-                var nutrientData: NutrientData? = null
-
-                // STEP 2: Barcode Path -> Open Food Facts
-                if (barcode != null) {
-                    nutrientData = OFFClient.getProductByBarcode(barcode)
-                }
-
-                // Priority Search: OFF -> USDA (Mocked/Future) -> Gemma -> Groq
-                // Currently OFF is our only external client, Gemma/Groq are our internal fallback
+                // Directly use AI for analysis as requested (forgetting OFF/USDA)
+                val searchPrompt = """
+                    Act as the Gut Intelligence Engine. Analyze: $description for $quantityGrams grams.
+                    Return ONLY a JSON object with nutrition for EXACTLY $quantityGrams grams:
+                    {
+                      "foodName": "string",
+                      "calories": integer,
+                      "protein": float,
+                      "carbs": float,
+                      "totalFat": float,
+                      "fiber": float,
+                      "resistantStarch": float,
+                      "sugar": float,
+                      "saturatedFats": float,
+                      "animalProtein": float,
+                      "polyphenols": float,
+                      "fermentedStatus": boolean,
+                      "additives": ["string"],
+                      "mainPrebioticCompound": "string",
+                      "sourceFound": "Gemma AI"
+                    }
+                """.trimIndent()
                 
-                // STEP 3: Search Path (Fallback or Manual Name)
-                if (nutrientData == null) {
-                    val searchPrompt = """
-                        Act as the Gut Intelligence Engine. Analyze: $finalDescription for $quantityGrams grams.
-                        Context from Image: ${identifiedJSON.toString()}
-                        
-                        Return ONLY a JSON object with nutrition for EXACTLY $quantityGrams grams:
-                        {
-                          "foodName": "string",
-                          "calories": integer,
-                          "protein": float,
-                          "carbs": float,
-                          "totalFat": float,
-                          "fiber": float,
-                          "resistantStarch": float,
-                          "sugar": float,
-                          "saturatedFats": float,
-                          "animalProtein": float,
-                          "polyphenols": float,
-                          "fermentedStatus": boolean,
-                          "additives": ["string"],
-                          "mainPrebioticCompound": "string",
-                          "sourceFound": "Gemma/Groq AI"
-                        }
-                    """.trimIndent()
-                    
-                    val resultText = GroqClient.generateContent(
-                        prompt = searchPrompt, 
-                        model = gemmaModel, 
-                        isJson = true,
-                        base64Image = null 
-                    )
+                val resultText = GroqClient.generateContent(
+                    prompt = searchPrompt, 
+                    model = gemmaModel, 
+                    isJson = true
+                )
 
-                    val json = JSONObject(resultText)
-                    nutrientData = NutrientData(
-                        foodName = json.optString("foodName"),
-                        calories = json.optInt("calories"),
-                        protein = json.optDouble("protein").toFloat(),
-                        carbs = json.optDouble("carbs").toFloat(),
-                        totalFat = json.optDouble("totalFat").toFloat(),
-                        fiber = json.optDouble("fiber").toFloat(),
-                        resistantStarch = json.optDouble("resistantStarch").toFloat(),
-                        sugar = json.optDouble("sugar").toFloat(),
-                        saturatedFats = json.optDouble("saturatedFats").toFloat(),
-                        animalProtein = json.optDouble("animalProtein").toFloat(),
-                        polyphenols = json.optDouble("polyphenols").toFloat(),
-                        fermentedStatus = json.optBoolean("fermentedStatus"),
-                        additives = mutableListOf<String>().apply {
-                            val array = json.optJSONArray("additives")
-                            if (array != null) {
-                                for (i in 0 until array.length()) {
-                                    add(array.getString(i))
-                                }
+                val json = JSONObject(resultText)
+                val nutrientData = NutrientData(
+                    foodName = json.optString("foodName"),
+                    calories = json.optInt("calories"),
+                    protein = json.optDouble("protein").toFloat(),
+                    carbs = json.optDouble("carbs").toFloat(),
+                    totalFat = json.optDouble("totalFat").toFloat(),
+                    fiber = json.optDouble("fiber").toFloat(),
+                    resistantStarch = json.optDouble("resistantStarch").toFloat(),
+                    sugar = json.optDouble("sugar").toFloat(),
+                    saturatedFats = json.optDouble("saturatedFats").toFloat(),
+                    animalProtein = json.optDouble("animalProtein").toFloat(),
+                    polyphenols = json.optDouble("polyphenols").toFloat(),
+                    fermentedStatus = json.optBoolean("fermentedStatus"),
+                    additives = mutableListOf<String>().apply {
+                        val array = json.optJSONArray("additives")
+                        if (array != null) {
+                            for (i in 0 until array.length()) {
+                                add(array.getString(i))
                             }
-                        },
-                        mainPrebioticCompound = json.optString("mainPrebioticCompound"),
-                        sourceFound = json.optString("sourceFound")
-                    )
-                }
+                        }
+                    },
+                    mainPrebioticCompound = json.optString("mainPrebioticCompound"),
+                    sourceFound = json.optString("sourceFound")
+                )
                 
-                // STEP 4: Gut Analysis Engine (Kotlin Logic)
-                val scorecard = MicrobeImpactCalculator.calculateGIE(nutrientData!!)
+                val scorecard = MicrobeImpactCalculator.calculateGIE(nutrientData)
                 
-                // STEP 5: AI Explanation (OpenRouter)
                 val explanationPrompt = """
-                    Explain this Gut Health Score: ${scorecard.gutHealthScore}/100.
-                    Food: ${nutrientData.foodName}
+                    Explain this Gut Health Score: ${scorecard.gutHealthScore}/100 for $quantityGrams grams of ${nutrientData.foodName}.
                     Microbe Shifts: ${scorecard.predictedShifts.joinToString { shift -> "${shift.microbeType.displayName}: ${shift.shiftPercentage}%" }}
-                    
-                    Specifically mention:
-                    - Bifidobacterium, Lactobacillus, Akkermansia, and Bacteroides impact.
-                    - Additives warning (if any).
-                    - Sugar and fiber analysis.
-                    - Personalized advice for improvement.
-                    
+                    Focus on Bifidobacterium, Lactobacillus, Akkermansia, and Bacteroides impact.
                     Keep it concise and scientific. No markdown symbols.
                 """.trimIndent()
                 
@@ -288,9 +231,10 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
 
                 _openRouterExplanation.value = explanation
                 _analyzedFood.value = nutrientData
-                _identifiedFoodName.value = null // Clear identification after full analysis
+                _identifiedFoodName.value = null
                 _analysisState.value = UiState.Success("Analysis Complete")
             } catch (e: Exception) {
+                Log.e("GutSyncViewModel", "Analysis Error", e)
                 _analysisState.value = UiState.Error(e.localizedMessage ?: "Analysis Failed")
             }
         }
@@ -305,6 +249,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 _analyzedFood.value = null
                 _capturedImage.value = null
                 _openRouterExplanation.value = null
+                _identifiedFoodName.value = null
             }
         }
     }
@@ -321,21 +266,15 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         val userMsg = ChatMessage(text = question, role = MessageRole.USER)
         val updatedMsgs = _currentSession.value.messages + userMsg
         _currentSession.value = _currentSession.value.copy(messages = updatedMsgs)
-        _chatImage.value = null // Clear attachment after sending
-        
+        _chatImage.value = null
         _chatState.value = UiState.Loading
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val modelToUse = if (_currentSession.value.preferredModel == "OpenRouter") gemmaModel else groqTextModel
-                
-                val prompt = "You are a friendly microbiome health expert named Cooper. " +
-                        "Answer concisely using microbiome research: $question. " +
-                        "Include emojis. No markdown symbols like '*' or '#'."
-                
+                val prompt = "You are a friendly microbiome health expert named Cooper. Answer concisely: $question. No markdown."
                 val base64 = bitmap?.toBase64()
                 
-                // Add placeholder for AI response
                 val modelMsg = ChatMessage(text = "", role = MessageRole.MODEL)
                 val msgsWithPlaceholder = _currentSession.value.messages + modelMsg
                 _currentSession.value = _currentSession.value.copy(messages = msgsWithPlaceholder)
@@ -347,12 +286,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                     base64Image = base64
                 ).collect { chunk ->
                     fullContent += chunk
-                    val cleanContent = fullContent
-                        .replace("**", "")
-                        .replace("*", "")
-                        .replace("#", "")
-                    
-                    // Update the last message in real-time
+                    val cleanContent = fullContent.replace("*", "").replace("#", "")
                     val currentMsgs = _currentSession.value.messages.toMutableList()
                     if (currentMsgs.isNotEmpty()) {
                         currentMsgs[currentMsgs.size - 1] = ChatMessage(text = cleanContent, role = MessageRole.MODEL)
@@ -365,17 +299,12 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 var summary = finalSession.summary
                 if (summary == "New Conversation" && finalSession.messages.size >= 2) {
                     val summaryPrompt = "Summarize in 4 words: $question"
-                    summary = GroqClient.generateContent(summaryPrompt, model = groqTextModel)
-                        .replace("\"", "")
+                    summary = GroqClient.generateContent(summaryPrompt, model = groqTextModel).replace("\"", "")
                 }
                     
-                    val finalUpdatedSession = finalSession.copy(
-                        summary = summary,
-                        lastUpdated = System.currentTimeMillis()
-                    )
-                    
-                    _currentSession.value = finalUpdatedSession
-                    repository.updateChatSession(finalUpdatedSession)
+                val finalUpdatedSession = finalSession.copy(summary = summary, lastUpdated = System.currentTimeMillis())
+                _currentSession.value = finalUpdatedSession
+                repository.updateChatSession(finalUpdatedSession)
             } catch (e: Exception) {
                 Log.e("GutSyncViewModel", "Chat Error", e)
                 _chatState.value = UiState.Error(e.localizedMessage ?: "Expert unavailable")
