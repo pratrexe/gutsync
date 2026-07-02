@@ -307,7 +307,7 @@ fun SettingsScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Logo by Vaibhav • Research by Aastha",
+                    text = "Logo and Design by Vaibhav • Research by Aastha",
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.padding(top = 4.dp)
@@ -347,7 +347,7 @@ fun TermsAndConditionsDialog(onDismiss: () -> Unit) {
 
                             5. Credits & Ownership
                             - Developed by: Pratyush
-                            - Visual Identity & Logo: Vaibhav
+                            - Logo and Design: Vaibhav
                             - Scientific Research & Logic: Aastha
 
                             6. Limitation of Liability

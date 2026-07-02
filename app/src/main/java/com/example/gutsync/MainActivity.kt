@@ -296,15 +296,15 @@ fun DynamicIslandNav(
             label = "indicator_offset"
         )
 
-        // 1. Base Glass Container
+        // 1. Base Glass Container (Heavy Material with Black Tint)
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .blur(15.dp)
-                .background(Color.White.copy(alpha = 0.05f))
+                .blur(100.dp)
+                .background(Color.Black.copy(alpha = 0.3f)) // Added black tint
                 .border(
                     BorderStroke(
-                        1.dp,
+                        1.5.dp,
                         Brush.verticalGradient(
                             listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)
                         )
@@ -313,7 +313,7 @@ fun DynamicIslandNav(
                 )
         )
 
-        // 2. Sliding Indicator (The "Pill")
+        // 2. Sliding Indicator (The "Pill") - Deeply Opaque
         Box(
             modifier = Modifier
                 .padding(6.dp)
@@ -321,13 +321,13 @@ fun DynamicIslandNav(
                 .width(tabWidth - 12.dp)
                 .fillMaxHeight()
                 .clip(CircleShape)
-                .blur(8.dp) // Extra internal blur for the black tint
-                .background(Color.Black.copy(alpha = 0.5f))
+                .blur(40.dp) // Softens the internal edges even more
+                .background(Color.Black.copy(alpha = 0.85f)) // Almost opaque black
                 .border(
                     BorderStroke(
                         1.dp,
                         Brush.verticalGradient(
-                            listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)
+                            listOf(Color.White.copy(alpha = 0.35f), Color.Transparent)
                         )
                     ),
                     CircleShape
