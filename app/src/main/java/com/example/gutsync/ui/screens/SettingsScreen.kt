@@ -52,6 +52,7 @@ fun SettingsScreen(
     var fiberGoal by remember(profile.fiberGoal) { mutableStateOf(profile.fiberGoal.toString()) }
     var polyphenolGoal by remember(profile.polyphenolGoal) { mutableStateOf(profile.polyphenolGoal.toString()) }
     var starchGoal by remember(profile.resistantStarchGoal) { mutableStateOf(profile.resistantStarchGoal.toString()) }
+    var showTerms by remember { mutableStateOf(false) }
 
     val csvImportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -244,6 +245,20 @@ fun SettingsScreen(
                         Icon(Icons.Default.FileUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                         Text("Import Data from CSV", color = Color.White, fontSize = 14.sp)
                     }
+
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(horizontal = 20.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showTerms = true }
+                            .padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(Icons.Default.Description, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        Text("Terms & Conditions", color = Color.White, fontSize = 14.sp)
+                    }
                 }
             }
         }
@@ -286,16 +301,73 @@ fun SettingsScreen(
                     .padding(vertical = 8.dp)
             ) {
                 Text(
-                    text = "Made by Pratyush Rai",
+                    text = "Made by Pratyush",
                     fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Logo by Vaibhav • Research by Aastha",
+                    fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    fontWeight = FontWeight.Medium
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
         }
 
         item { Spacer(modifier = Modifier.height(100.dp)) }
     }
+
+    if (showTerms) {
+        TermsAndConditionsDialog(onDismiss = { showTerms = false })
+    }
+}
+
+@Composable
+fun TermsAndConditionsDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Terms & Conditions", fontWeight = FontWeight.Bold) },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                item {
+                    Text(
+                        text = """
+                            1. Acceptance of Terms
+                            By using GutSync, you agree to these terms. GutSync provides microbiome insights based on AI analysis and user input.
+
+                            2. Not Medical Advice
+                            The information provided by Maya and the Gut Intelligence Engine (GIE) is for educational purposes only. It is not a substitute for professional medical advice, diagnosis, or treatment.
+
+                            3. Data Privacy
+                            Your nutritional data is stored locally or in your personal Google Drive. We do not sell your personal health logs.
+
+                            4. User Responsibility
+                            Accuracy of analysis depends on the quality of your input. Use the barcode scanner or clear photos for best results.
+
+                            5. Credits & Ownership
+                            - Developed by: Pratyush
+                            - Visual Identity & Logo: Vaibhav
+                            - Scientific Research & Logic: Aastha
+
+                            6. Limitation of Liability
+                            GutSync is provided "as is". We are not responsible for dietary decisions made based on app insights.
+                        """.trimIndent(),
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Understood", fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = Color(0xFF1C1C1E),
+        titleContentColor = Color.White,
+        textContentColor = Color.White.copy(alpha = 0.8f)
+    )
 }
 
 @Composable
