@@ -38,8 +38,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.UiState
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.common.InputImage
 import com.example.gutsync.data.MicrobeImpactCalculator
 import com.example.gutsync.data.NutrientData
 import com.example.gutsync.ui.theme.SurfaceContainerLow
@@ -55,15 +53,13 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
     val openRouterExplanation by viewModel.openRouterExplanation.collectAsState()
     val uiState by viewModel.analysisState.collectAsState()
     val capturedImage by viewModel.capturedImage.collectAsState()
+    val identifiedFoodName by viewModel.identifiedFoodName.collectAsState()
+    var quantityInput by remember { mutableStateOf("100") }
     val context = LocalContext.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            // Permission granted, do nothing and wait for user to click again or auto-launch
-        }
-    }
+    ) { isGranted -> }
 
     val photoUri = remember {
         val imagesDir = File(context.cacheDir, "images")
@@ -80,23 +76,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                 context.contentResolver.openInputStream(photoUri)?.use { stream ->
                     val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
                     viewModel.setCapturedImage(bitmap)
-                    
-                    // Barcode Scanning logic (Handled separately now)
-                    val image = InputImage.fromBitmap(bitmap, 0)
-                    val scanner = BarcodeScanning.getClient()
-                    scanner.process(image)
-                        .addOnSuccessListener { barcodes ->
-                            val barcode = barcodes.firstOrNull()?.rawValue
-                            if (barcode != null) {
-                                viewModel.analyzeBarcode(barcode)
-                            } else {
-                                // Fallback to photo analysis if no barcode found during "Barcode Scan"
-                                viewModel.analyzeFood(searchQuery, bitmap)
-                            }
-                        }
-                        .addOnFailureListener {
-                            viewModel.analyzeFood(searchQuery, bitmap)
-                        }
+                    viewModel.identifyFoodFromPhoto(bitmap)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -141,13 +121,12 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
             }
         }
 
-        // 2. Action Hub (Divided into Photo and Barcode)
+        // 2. Action Hub
         item {
             Row(
                 modifier = Modifier.fillMaxWidth().height(160.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Photo Section
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -182,7 +161,6 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                     }
                 }
 
-                // Barcode Section
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -191,7 +169,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                         .background(SurfaceContainerLow)
                         .border(1.dp, Color(0xFF2C2C2E), RoundedCornerShape(24.dp))
                         .clickable {
-                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                             if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                 cameraLauncher.launch(photoUri)
                             } else {
                                 permissionLauncher.launch(android.Manifest.permission.CAMERA)
@@ -208,75 +186,90 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
             }
         }
 
-        // 3. Dynamic Action Button (Analyze or Confirm)
-        item {
-            if (uiState is UiState.Loading) {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.White)
-                }
-            } else {
-                if (analyzedFood != null) {
-                    Button(
-                        onClick = { viewModel.addAnalyzedFood(); searchQuery = "" },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Confirm and Log Meal", fontWeight = FontWeight.Bold)
-                    }
-                } else if (uiState is UiState.Error && capturedImage != null) {
-                    // Improved Google Lens Fallback using standard SEND intent for local files
-                    Button(
-                        onClick = {
-                            try {
-                                val lensIntent = Intent("com.google.android.googlequicksearchbox.GOOGLE_LENS")
-                                lensIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                lensIntent.setDataAndType(photoUri, "image/jpeg")
-                                lensIntent.setPackage("com.google.android.googlequicksearchbox")
-                                context.startActivity(lensIntent)
-                            } catch (e: Exception) {
-                                // Fallback to standard ACTION_SEND if custom action fails
-                                try {
-                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "image/jpeg"
-                                        putExtra(Intent.EXTRA_STREAM, photoUri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        setPackage("com.google.android.googlequicksearchbox")
-                                    }
-                                    context.startActivity(sendIntent)
-                                } catch (e2: Exception) {
-                                    // Final fallback to web browser
-                                    val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/searchbyimage?image_url=$photoUri"))
-                                    context.startActivity(webIntent)
-                                }
+        // 3. Quantity and Search
+        if (identifiedFoodName != null || searchQuery.isNotBlank()) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (identifiedFoodName != null) {
+                        OutlinedTextField(
+                            value = identifiedFoodName!!,
+                            onValueChange = { /* Identified name is read-only or updated via search box */ },
+                            label = { Text("Identified Item") },
+                            modifier = Modifier.fillMaxWidth(),
+                            readOnly = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color.White.copy(alpha = 0.5f),
+                                unfocusedBorderColor = Color.Gray.copy(alpha = 0.5f)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            trailingIcon = {
+                                Icon(
+                                    Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4), contentColor = Color.White),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Identify with Google Lens", fontWeight = FontWeight.Bold)
+                        )
                     }
-                } else if (capturedImage != null || searchQuery.isNotBlank()) {
-                    Button(
-                        onClick = { viewModel.analyzeFood(searchQuery, capturedImage) },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                        shape = RoundedCornerShape(16.dp)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Analyze with Groq AI", fontWeight = FontWeight.Bold)
+                        OutlinedTextField(
+                            value = quantityInput,
+                            onValueChange = { quantityInput = it },
+                            label = { Text("Quantity (g)") },
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color.White,
+                                unfocusedBorderColor = Color.Gray
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+
+                        Button(
+                            onClick = { 
+                                val desc = identifiedFoodName ?: searchQuery
+                                viewModel.analyzeFood(desc, capturedImage, quantityInput.toFloatOrNull() ?: 100f) 
+                            },
+                            modifier = Modifier.height(56.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text("Search", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
         }
 
-        // 4. Results (Only shown after analysis)
+        item {
+            if (uiState is UiState.Loading) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.White)
+                }
+            } else if (analyzedFood != null) {
+                Button(
+                    onClick = { viewModel.addAnalyzedFood(); searchQuery = ""; quantityInput = "100" },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Confirm and Log Meal", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // 4. Results
         if (analyzedFood != null) {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -288,7 +281,6 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
             item {
                 val scorecard = MicrobeImpactCalculator.calculateGIE(analyzedFood!!)
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Data Source Badge
                     if (analyzedFood!!.sourceFound.isNotBlank()) {
                         Surface(
                             color = Color.White.copy(alpha = 0.1f),
@@ -447,6 +439,25 @@ fun RealRecentItemRow(entry: com.example.gutsync.data.storage.MealLogEntry) {
         }
     }
 
+    val timeText = remember(entry.timestamp) {
+        val now = java.util.Calendar.getInstance()
+        val mealTime = java.util.Calendar.getInstance().apply { timeInMillis = entry.timestamp }
+        
+        when {
+            now.get(java.util.Calendar.YEAR) == mealTime.get(java.util.Calendar.YEAR) &&
+            now.get(java.util.Calendar.DAY_OF_YEAR) == mealTime.get(java.util.Calendar.DAY_OF_YEAR) -> "Today"
+            
+            now.get(java.util.Calendar.YEAR) == mealTime.get(java.util.Calendar.YEAR) &&
+            now.get(java.util.Calendar.DAY_OF_YEAR) - mealTime.get(java.util.Calendar.DAY_OF_YEAR) == 1 -> "Yesterday"
+            
+            else -> java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault()).format(java.util.Date(entry.timestamp))
+        }
+    }
+
+    val clockTime = remember(entry.timestamp) {
+        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(entry.timestamp))
+    }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceContainerLow),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2C2C2E)),
@@ -458,7 +469,6 @@ fun RealRecentItemRow(entry: com.example.gutsync.data.storage.MealLogEntry) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Photo Thumbnail
             Box(
                 modifier = Modifier
                     .size(56.dp)
@@ -485,7 +495,11 @@ fun RealRecentItemRow(entry: com.example.gutsync.data.storage.MealLogEntry) {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = nutrients.foodName, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-                Text(text = "Logged • ${nutrients.calories} kcal", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = "$timeText at $clockTime • ${nutrients.calories} kcal",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             
             Surface(
@@ -543,11 +557,7 @@ fun ManualLogDialog(
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            // User can try clicking again
-        }
-    }
+    ) { isGranted -> }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -555,7 +565,6 @@ fun ManualLogDialog(
         containerColor = Color(0xFF1C1C1E),
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Photo Picker Section
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()

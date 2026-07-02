@@ -60,34 +60,30 @@ object MicrobeImpactCalculator {
         val shifts = mutableListOf<MicrobeShift>()
         
         // 1. Bifidobacterium & Lactobacillus: Boosted by Fiber, Starch, and Fermentation
-        val fiberImpact = ((nutrients.fiber + nutrients.resistantStarch) * 5f).coerceAtMost(40f)
-        val fermentedBonus = if (nutrients.fermentedStatus) 30f else 0f
+        // Fiber target is ~30g/day. 30 * 2 = 60 points max from fiber.
+        val fiberImpact = ((nutrients.fiber + nutrients.resistantStarch) * 2f).coerceAtMost(60f)
+        val fermentedBonus = if (nutrients.fermentedStatus) 20f else 0f
         val bifidoLactoBase = (fiberImpact + fermentedBonus).coerceIn(0f, 100f)
         
         shifts.add(MicrobeShift(MicrobeType.BIFIDOBACTERIUM, bifidoLactoBase, 85))
         shifts.add(MicrobeShift(MicrobeType.LACTOBACILLUS, bifidoLactoBase, 80))
 
         // 2. Akkermansia: Boosted by Polyphenols
-        val akkerImpact = (nutrients.polyphenols / 5f).coerceIn(0f, 100f)
+        val akkerImpact = (nutrients.polyphenols * 2f).coerceIn(0f, 100f)
         shifts.add(MicrobeShift(MicrobeType.AKKERMANSIA, akkerImpact, 70))
 
         // 3. Bacteroides: Inhibited by Sugar, Saturated Fats, and Additives
-        var bacterPenalty = (nutrients.sugar * 2f) + (nutrients.saturatedFats * 3f)
-        if (nutrients.additives.isNotEmpty()) bacterPenalty += 20f
+        var bacterPenalty = (nutrients.sugar * 1.5f) + (nutrients.saturatedFats * 2f)
+        if (nutrients.additives.isNotEmpty()) bacterPenalty += 15f
         val bacterShift = -bacterPenalty.coerceIn(0f, 100f)
         shifts.add(MicrobeShift(MicrobeType.BACTEROIDES, bacterShift, 60))
 
         // 4. Synthesize Aggregate Scores
-        val diversity = (bifidoLactoBase + akkerImpact).toInt().coerceIn(0, 100)
+        val diversity = ((bifidoLactoBase * 0.7f) + (akkerImpact * 0.3f)).toInt().coerceIn(0, 100)
         val inflammation = bacterPenalty.toInt().coerceIn(0, 100)
         
-        // Base score starts at 40 (poor) and moves up based on diversity/fiber
-        // A food-less state (0 everything) results in a neutral/low starting point
-        val overall = if (nutrients.foodName.isEmpty() && nutrients.fiber == 0f && !nutrients.fermentedStatus) {
-            40 // Fasting/Empty state
-        } else {
-            (diversity - (inflammation / 2) + 30).coerceIn(0, 100)
-        }
+        // Strict calculation: Start at 0, no arbitrary baseline.
+        val overall = (diversity - (inflammation / 2)).coerceIn(0, 100)
 
         return GIEScorecard(
             gutHealthScore = overall,
@@ -97,7 +93,7 @@ object MicrobeImpactCalculator {
             inflammationRisk = inflammation,
             predictedShifts = shifts,
             confidenceLevel = "High",
-            scientificReasoning = "Based on presence of ${nutrients.mainPrebioticCompound ?: "fiber"} and nutrient profile."
+            scientificReasoning = "Calculated from ${nutrients.fiber}g fiber and ${nutrients.polyphenols} units of polyphenols."
         )
     }
 }

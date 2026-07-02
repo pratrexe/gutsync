@@ -63,8 +63,10 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
     private val groqTextModel = "llama-3.3-70b-versatile"
 
     private fun Bitmap.toBase64(): String {
+        // Scale down to 1024px width for better recognition without massive payloads
+        val scaled = Bitmap.createScaledBitmap(this, 1024, (height * 1024f / width).toInt(), true)
         val outputStream = ByteArrayOutputStream()
-        this.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+        scaled.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
         return Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
     }
 
@@ -131,7 +133,31 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun analyzeFood(description: String, bitmap: Bitmap? = null) {
+    private val _identifiedFoodName = MutableStateFlow<String?>(null)
+    val identifiedFoodName: StateFlow<String?> = _identifiedFoodName.asStateFlow()
+
+    fun identifyFoodFromPhoto(bitmap: Bitmap) {
+        _analysisState.value = UiState.Loading
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val visionPrompt = "Identify the primary food item in this image. Return ONLY the name of the food, nothing else."
+                val base64 = bitmap.toBase64()
+                val result = GroqClient.generateContent(
+                    prompt = visionPrompt,
+                    model = gemmaModel,
+                    isJson = false,
+                    base64Image = base64
+                ).trim().replace(".", "").replace("*", "")
+                
+                _identifiedFoodName.value = result
+                _analysisState.value = UiState.Initial
+            } catch (e: Exception) {
+                _analysisState.value = UiState.Error("Identification failed: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    fun analyzeFood(description: String, bitmap: Bitmap? = null, quantityGrams: Float = 100f) {
         _analysisState.value = UiState.Loading
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -173,15 +199,16 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                     nutrientData = OFFClient.getProductByBarcode(barcode)
                 }
 
+                // Priority Search: OFF -> USDA (Mocked/Future) -> Gemma -> Groq
+                // Currently OFF is our only external client, Gemma/Groq are our internal fallback
+                
                 // STEP 3: Search Path (Fallback or Manual Name)
                 if (nutrientData == null) {
                     val searchPrompt = """
-                        Act as the Gut Intelligence Engine. Analyze: $finalDescription.
+                        Act as the Gut Intelligence Engine. Analyze: $finalDescription for $quantityGrams grams.
                         Context from Image: ${identifiedJSON.toString()}
                         
-                        Search Open Food Facts and USDA FoodData Central logic.
-                        
-                        Return ONLY a JSON object:
+                        Return ONLY a JSON object with nutrition for EXACTLY $quantityGrams grams:
                         {
                           "foodName": "string",
                           "calories": integer,
@@ -197,7 +224,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                           "fermentedStatus": boolean,
                           "additives": ["string"],
                           "mainPrebioticCompound": "string",
-                          "sourceFound": "string"
+                          "sourceFound": "Gemma/Groq AI"
                         }
                     """.trimIndent()
                     
@@ -261,6 +288,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
 
                 _openRouterExplanation.value = explanation
                 _analyzedFood.value = nutrientData
+                _identifiedFoodName.value = null // Clear identification after full analysis
                 _analysisState.value = UiState.Success("Analysis Complete")
             } catch (e: Exception) {
                 _analysisState.value = UiState.Error(e.localizedMessage ?: "Analysis Failed")

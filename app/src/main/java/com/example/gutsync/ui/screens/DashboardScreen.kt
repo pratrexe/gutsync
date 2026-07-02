@@ -35,23 +35,29 @@ fun DashboardScreen(
     val appData by viewModel.appData.collectAsState()
     val meals = appData.meals
     
-    // Calculate REAL status based on meal history
+    // Calculate REAL status based on meal history (Reset every day at midnight)
     val currentNutrients = if (meals.isNotEmpty()) {
-        val last24h = System.currentTimeMillis() - (24 * 60 * 60 * 1000)
-        val recentMeals = meals.filter { it.timestamp > last24h }
+        val calendar = java.util.Calendar.getInstance()
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        calendar.set(java.util.Calendar.MINUTE, 0)
+        calendar.set(java.util.Calendar.SECOND, 0)
+        calendar.set(java.util.Calendar.MILLISECOND, 0)
+        val startOfToday = calendar.timeInMillis
+        
+        val todayMeals = meals.filter { it.timestamp >= startOfToday }
         NutrientData(
-            fiber = recentMeals.sumOf { it.nutrients.fiber.toDouble() }.toFloat(),
-            resistantStarch = recentMeals.sumOf { it.nutrients.resistantStarch.toDouble() }.toFloat(),
-            polyphenols = recentMeals.sumOf { it.nutrients.polyphenols.toDouble() }.toFloat(),
-            sugar = recentMeals.sumOf { it.nutrients.sugar.toDouble() }.toFloat(),
-            saturatedFats = recentMeals.sumOf { it.nutrients.saturatedFats.toDouble() }.toFloat(),
-            fermentedStatus = recentMeals.any { it.nutrients.fermentedStatus }
+            fiber = todayMeals.sumOf { it.nutrients.fiber.toDouble() }.toFloat(),
+            resistantStarch = todayMeals.sumOf { it.nutrients.resistantStarch.toDouble() }.toFloat(),
+            polyphenols = todayMeals.sumOf { it.nutrients.polyphenols.toDouble() }.toFloat(),
+            sugar = todayMeals.sumOf { it.nutrients.sugar.toDouble() }.toFloat(),
+            saturatedFats = todayMeals.sumOf { it.nutrients.saturatedFats.toDouble() }.toFloat(),
+            fermentedStatus = todayMeals.any { it.nutrients.fermentedStatus }
         )
     } else NutrientData()
 
     val (healthScore, shifts) = remember(currentNutrients, meals) {
         if (meals.isEmpty()) {
-            50 to MicrobeImpactCalculator.calculateGIE(NutrientData()).predictedShifts
+            0 to MicrobeImpactCalculator.calculateGIE(NutrientData()).predictedShifts
         } else {
             val scorecard = MicrobeImpactCalculator.calculateGIE(currentNutrients)
             scorecard.gutHealthScore to scorecard.predictedShifts
