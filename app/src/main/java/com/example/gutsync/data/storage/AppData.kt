@@ -24,5 +24,5 @@ data class MealLogEntry(
     val nutrients: NutrientData,
     val timestamp: Long = System.currentTimeMillis(),
     val imageBase64: String? = null,
-    val qwenExplanation: String? = null
+    val openRouterExplanation: String? = null
 )

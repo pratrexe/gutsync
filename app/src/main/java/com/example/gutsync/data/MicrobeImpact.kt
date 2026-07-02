@@ -80,7 +80,14 @@ object MicrobeImpactCalculator {
         // 4. Synthesize Aggregate Scores
         val diversity = (bifidoLactoBase + akkerImpact).toInt().coerceIn(0, 100)
         val inflammation = bacterPenalty.toInt().coerceIn(0, 100)
-        val overall = (diversity - (inflammation / 2) + 50).coerceIn(0, 100)
+        
+        // Base score starts at 40 (poor) and moves up based on diversity/fiber
+        // A food-less state (0 everything) results in a neutral/low starting point
+        val overall = if (nutrients.foodName.isEmpty() && nutrients.fiber == 0f && !nutrients.fermentedStatus) {
+            40 // Fasting/Empty state
+        } else {
+            (diversity - (inflammation / 2) + 30).coerceIn(0, 100)
+        }
 
         return GIEScorecard(
             gutHealthScore = overall,

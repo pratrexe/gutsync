@@ -4,12 +4,12 @@ GutSync is a minimalist, high-performance mobile health application designed to 
 
 ## 🌟 Key Features
 
-- **Advanced AI-Powered Meal Analysis**: Uses **Qwen3.5-397B-A17B (via NVIDIA)** for a multi-stage analysis pipeline:
-    1. **Visual Extraction**: Identifies food names, ingredients, portion sizes, brands, and even barcodes or nutrition label OCR from photos.
-    2. **Structured Search**: Routes data to **Open Food Facts** (for barcodes) or **USDA FoodData Central** for high-fidelity nutritional matching.
+- **Advanced AI-Powered Meal Analysis**: Uses **Gemma 4 (via OpenRouter)** for a multi-stage analysis pipeline:
+    1. **Visual & Barcode Extraction**: Identifies food names, ingredients, portion sizes, and scans **barcodes** using ML Kit.
+    2. **Intelligent Search Logic**: Automatically routes barcodes to **Open Food Facts API** and general food names to **USDA FoodData Central** logic.
     3. **Microbe Impact Engine**: Calculates precise shifts in Bifidobacterium, Lactobacillus, Akkermansia, and more.
-- **AI Explanation**: Qwen provides scientific reasoning for every score, explaining prebiotic/probiotic impact and diversity shifts.
-- **Manual Food Logging**: Precise manual entry with photo attachment support.
+- **AI Explanation**: Gemma 4 provides scientific reasoning for every score, explaining prebiotic/probiotic impact and diversity shifts.
+- **Manual Food Logging**: Precise manual entry with photo attachment support and AI-assisted interpretaton of meal names.
 - **Longitudinal Trends**: Track "Pro-inflammatory" vs "Anti-inflammatory" gut states over time.
 - **Google Drive Sync**: Secure, cross-device data backup via personal cloud storage.
 
@@ -17,7 +17,7 @@ GutSync is a minimalist, high-performance mobile health application designed to 
 
 - **UI**: Jetpack Compose (Material 3)
 - **Language**: Kotlin
-- **Primary AI**: NVIDIA Qwen3.5-397B-A17B (Multimodal)
+- **Primary AI**: OpenRouter (Gemma 4-31B-it)
 - **Fallback/Chat AI**: Groq Llama 3.3 70B
 - **Database**: USDA FoodData Central & Open Food Facts logic
 - **Storage**: Google Drive API + Local JSON

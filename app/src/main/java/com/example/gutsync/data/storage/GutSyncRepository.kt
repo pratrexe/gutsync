@@ -43,6 +43,14 @@ class GutSyncRepository(private val context: Context) {
         }
     }
 
+    fun clearData() {
+        _appData.value = AppData()
+        driveHelper = null
+        if (localFile.exists()) {
+            localFile.delete()
+        }
+    }
+
     fun setDriveService(drive: Drive) {
         driveHelper = DriveServiceHelper(drive)
     }
@@ -53,6 +61,11 @@ class GutSyncRepository(private val context: Context) {
             if (session.isDriveConnected && driveHelper != null) {
                 val driveContent = Tasks.await(driveHelper!!.readFile(session.driveFileId!!))
                 _appData.value = json.decodeFromString<AppData>(driveContent)
+                // If we have local data but just connected to drive, we might want to clean up local
+                if (localFile.exists()) {
+                    Log.d("GutSyncAuth", "Cleaning up local file as Drive is connected")
+                    localFile.delete()
+                }
             } else if (localFile.exists()) {
                 val jsonStr = localFile.readText()
                 _appData.value = json.decodeFromString<AppData>(jsonStr)
@@ -66,11 +79,18 @@ class GutSyncRepository(private val context: Context) {
     suspend fun saveData() = withContext(Dispatchers.IO) {
         try {
             val jsonStr = json.encodeToString(_appData.value)
-            localFile.writeText(jsonStr)
-
             val session = sessionManager.getSession()
+            
             if (session.isDriveConnected && driveHelper != null) {
+                // Store ONLY in Drive
                 Tasks.await(driveHelper!!.updateFile(session.driveFileId!!, jsonStr))
+                // Ensure local file is gone if it exists
+                if (localFile.exists()) {
+                    localFile.delete()
+                }
+            } else {
+                // Offline mode: Store locally
+                localFile.writeText(jsonStr)
             }
         } catch (e: Exception) {
             Log.e("GutSyncAuth", "Error saving data: ${e.message}")
@@ -101,6 +121,11 @@ class GutSyncRepository(private val context: Context) {
                 _appData.value = json.decodeFromString<AppData>(driveContent)
             }
 
+            // Successfully synced with Drive, delete local copy to ensure Drive is the only source
+            if (localFile.exists()) {
+                localFile.delete()
+            }
+
             val updatedSession = session.copy(
                 driveFolderId = folderId,
                 driveFileId = fileId
@@ -114,9 +139,9 @@ class GutSyncRepository(private val context: Context) {
         }
     }
 
-    suspend fun addMeal(nutrients: NutrientData, imageBase64: String? = null, qwenExplanation: String? = null) {
+    suspend fun addMeal(nutrients: NutrientData, imageBase64: String? = null, openRouterExplanation: String? = null) {
         val currentMeals = _appData.value.meals.toMutableList()
-        currentMeals.add(MealLogEntry(nutrients, imageBase64 = imageBase64, qwenExplanation = qwenExplanation))
+        currentMeals.add(MealLogEntry(nutrients, imageBase64 = imageBase64, openRouterExplanation = openRouterExplanation))
         _appData.value = _appData.value.copy(meals = currentMeals)
         saveData()
     }

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,6 +38,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.UiState
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
 import com.example.gutsync.data.MicrobeImpactCalculator
 import com.example.gutsync.data.NutrientData
 import com.example.gutsync.ui.theme.SurfaceContainerLow
@@ -49,7 +52,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
     var showManualDialog by remember { mutableStateOf(false) }
     val appData by viewModel.appData.collectAsState()
     val analyzedFood by viewModel.analyzedFood.collectAsState()
-    val qwenExplanation by viewModel.qwenExplanation.collectAsState()
+    val openRouterExplanation by viewModel.openRouterExplanation.collectAsState()
     val uiState by viewModel.analysisState.collectAsState()
     val capturedImage by viewModel.capturedImage.collectAsState()
     val context = LocalContext.current
@@ -77,6 +80,23 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                 context.contentResolver.openInputStream(photoUri)?.use { stream ->
                     val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
                     viewModel.setCapturedImage(bitmap)
+                    
+                    // Barcode Scanning logic (Handled separately now)
+                    val image = InputImage.fromBitmap(bitmap, 0)
+                    val scanner = BarcodeScanning.getClient()
+                    scanner.process(image)
+                        .addOnSuccessListener { barcodes ->
+                            val barcode = barcodes.firstOrNull()?.rawValue
+                            if (barcode != null) {
+                                viewModel.analyzeBarcode(barcode)
+                            } else {
+                                // Fallback to photo analysis if no barcode found during "Barcode Scan"
+                                viewModel.analyzeFood(searchQuery, bitmap)
+                            }
+                        }
+                        .addOnFailureListener {
+                            viewModel.analyzeFood(searchQuery, bitmap)
+                        }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -88,7 +108,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         item { Spacer(modifier = Modifier.height(16.dp)) }
 
@@ -121,64 +141,68 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
             }
         }
 
-        // 2. Image Spotlight
+        // 2. Action Hub (Divided into Photo and Barcode)
         item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(SurfaceContainerLow)
-                    .border(1.dp, Color(0xFF2C2C2E), RoundedCornerShape(24.dp))
-                    .clickable {
-                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                            cameraLauncher.launch(photoUri)
-                        } else {
-                            permissionLauncher.launch(android.Manifest.permission.CAMERA)
-                        }
-                    },
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxWidth().height(160.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (capturedImage != null) {
-                    Image(
-                        bitmap = capturedImage!!.asImageBitmap(),
-                        contentDescription = "Captured Meal",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.BottomEnd
-                    ) {
-                        Surface(
-                            modifier = Modifier.padding(16.dp),
-                            color = Color.Black.copy(alpha = 0.6f),
-                            shape = CircleShape
-                        ) {
-                            Icon(
-                                Icons.Default.CameraAlt,
-                                contentDescription = "Retake",
-                                tint = Color.White,
-                                modifier = Modifier.padding(8.dp).size(20.dp)
-                            )
+                // Photo Section
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(SurfaceContainerLow)
+                        .border(1.dp, Color(0xFF2C2C2E), RoundedCornerShape(24.dp))
+                        .clickable {
+                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                cameraLauncher.launch(photoUri)
+                            } else {
+                                permissionLauncher.launch(android.Manifest.permission.CAMERA)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (capturedImage != null) {
+                        Image(
+                            bitmap = capturedImage!!.asImageBitmap(),
+                            contentDescription = "Captured Meal",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
+                        Icon(Icons.Default.CameraAlt, "Retake", tint = Color.White)
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.CameraAlt, null, tint = Color.White, modifier = Modifier.size(32.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Snap Photo", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
                     }
-                } else {
+                }
+
+                // Barcode Section
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(SurfaceContainerLow)
+                        .border(1.dp, Color(0xFF2C2C2E), RoundedCornerShape(24.dp))
+                        .clickable {
+                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                cameraLauncher.launch(photoUri)
+                            } else {
+                                permissionLauncher.launch(android.Manifest.permission.CAMERA)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.CameraAlt,
-                            contentDescription = "Capture Food",
-                            tint = Color.White,
-                            modifier = Modifier.size(48.dp)
-                        )
+                        Icon(Icons.Default.QrCodeScanner, null, tint = Color.White, modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Snap Photo for GIE Analysis",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp
-                        )
+                        Text("Scan Barcode", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -288,7 +312,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                     ) {
                         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text("GIE SCIENTIFIC INSIGHT", fontSize = 10.sp, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(qwenExplanation ?: scorecard.scientificReasoning, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
+                            Text(openRouterExplanation ?: scorecard.scientificReasoning, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
                             HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 ScoreLabel("Inflammation Risk", "${scorecard.inflammationRisk}%")

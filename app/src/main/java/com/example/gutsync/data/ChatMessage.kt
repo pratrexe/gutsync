@@ -21,5 +21,6 @@ data class ChatSession(
     val id: String = UUID.randomUUID().toString(),
     val summary: String = "New Conversation",
     val messages: List<ChatMessage> = emptyList(),
-    val lastUpdated: Long = System.currentTimeMillis()
+    val lastUpdated: Long = System.currentTimeMillis(),
+    val preferredModel: String = "OpenRouter" // "Groq" or "OpenRouter"
 )

@@ -2,7 +2,6 @@ package com.example.gutsync.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,23 +11,28 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
 import com.example.gutsync.GutSyncViewModel
@@ -37,6 +41,7 @@ import com.example.gutsync.data.ChatMessage
 import com.example.gutsync.data.ChatSession
 import com.example.gutsync.data.MessageRole
 import com.example.gutsync.data.auth.AuthSession
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -47,9 +52,41 @@ fun AskCooperScreen(session: AuthSession, viewModel: GutSyncViewModel = viewMode
     val currentSession by viewModel.currentSession.collectAsState()
     val chatHistory by viewModel.chatHistory.collectAsState()
     val uiState by viewModel.chatState.collectAsState()
+    val attachedImage by viewModel.chatImage.collectAsState()
     val listState = rememberLazyListState()
+    val context = LocalContext.current
     
     var showHistory by remember { mutableStateOf(false) }
+
+    val photoUri = remember {
+        val imagesDir = File(context.cacheDir, "images")
+        if (!imagesDir.exists()) imagesDir.mkdirs()
+        val tempFile = File.createTempFile("chat_attachment_", ".jpg", imagesDir)
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            try {
+                context.contentResolver.openInputStream(photoUri)?.use { stream ->
+                    val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
+                    viewModel.setChatImage(bitmap)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            cameraLauncher.launch(photoUri)
+        }
+    }
 
     // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(currentSession.messages.size) {
@@ -103,8 +140,17 @@ fun AskCooperScreen(session: AuthSession, viewModel: GutSyncViewModel = viewMode
             ChatInputArea(
                 value = question,
                 onValueChange = { question = it },
+                attachedImage = attachedImage,
+                onAddClick = {
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        cameraLauncher.launch(photoUri)
+                    } else {
+                        permissionLauncher.launch(android.Manifest.permission.CAMERA)
+                    }
+                },
+                onRemoveImage = { viewModel.setChatImage(null) },
                 onSend = {
-                    if (question.isNotBlank()) {
+                    if (question.isNotBlank() || attachedImage != null) {
                         viewModel.askFoodQuestion(question)
                         question = ""
                     }
@@ -137,18 +183,26 @@ fun AskCooperScreen(session: AuthSession, viewModel: GutSyncViewModel = viewMode
 
                 VerticalDivider(color = Color.White.copy(alpha = 0.2f), modifier = Modifier.height(24.dp))
 
-                Surface(
-                    color = Color.White.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.padding(end = 4.dp)
+                Column(
+                    modifier = Modifier
+                        .clickable { viewModel.toggleSessionModel() }
+                        .padding(end = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = currentSession.summary,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                         color = Color.White,
                         fontSize = 13.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "via ${if (currentSession.preferredModel == "OpenRouter") "Gemma 4" else "Groq"}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 2.dp)
                     )
                 }
             }
@@ -218,14 +272,33 @@ fun ChatSessionHighlightCard(session: ChatSession, onClick: () -> Unit) {
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
-            val lastMsg = session.messages.lastOrNull()?.text ?: "No messages"
-            Text(
-                text = lastMsg,
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.6f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                val lastMsg = session.messages.lastOrNull()?.text ?: "No messages"
+                Text(
+                    text = lastMsg,
+                    fontSize = 13.sp,
+                    color = Color.White.copy(alpha = 0.6f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Surface(
+                    color = Color.White.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
+                    Text(
+                        text = session.preferredModel,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        color = Color.Gray,
+                        fontSize = 10.sp
+                    )
+                }
+            }
         }
     }
 }
@@ -374,52 +447,99 @@ fun LoadingBubble() {
 }
 
 @Composable
-fun ChatInputArea(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit) {
-    Row(
+fun ChatInputArea(
+    value: String,
+    onValueChange: (String) -> Unit,
+    attachedImage: android.graphics.Bitmap? = null,
+    onAddClick: () -> Unit,
+    onRemoveImage: () -> Unit,
+    onSend: () -> Unit
+) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp)
             .padding(bottom = 80.dp),
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Surface(
-            color = Color.White,
-            shape = RoundedCornerShape(30.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            TextField(
-                value = value,
-                onValueChange = onValueChange,
-                placeholder = { Text("Ask anything here..", color = Color.Gray) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = Color.Black,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black
-                ),
-                maxLines = 4
-            )
+        // Image Preview
+        if (attachedImage != null) {
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.1f))
+            ) {
+                Image(
+                    bitmap = attachedImage.asImageBitmap(),
+                    contentDescription = "Attachment",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                IconButton(
+                    onClick = onRemoveImage,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(24.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                }
+            }
         }
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            FloatingActionButton(
-                onClick = onSend,
-                containerColor = Color(0xFFD1C4E9),
-                contentColor = Color.Black,
-                shape = CircleShape,
-                modifier = Modifier.size(48.dp),
-                elevation = FloatingActionButtonDefaults.elevation(0.dp)
+            Surface(
+                color = Color.White,
+                shape = RoundedCornerShape(30.dp),
+                modifier = Modifier.weight(1f)
             ) {
-                Icon(if (value.isBlank()) Icons.Default.Add else Icons.Default.Send, contentDescription = "Send")
+                TextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    placeholder = { Text("Ask anything here..", color = Color.Gray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = Color.Black,
+                        focusedTextColor = Color.Black,
+                        unfocusedTextColor = Color.Black
+                    ),
+                    maxLines = 4
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FloatingActionButton(
+                    onClick = {
+                        if (value.isBlank() && attachedImage == null) {
+                            onAddClick()
+                        } else {
+                            onSend()
+                        }
+                    },
+                    containerColor = Color(0xFFD1C4E9),
+                    contentColor = Color.Black,
+                    shape = CircleShape,
+                    modifier = Modifier.size(48.dp),
+                    elevation = FloatingActionButtonDefaults.elevation(0.dp)
+                ) {
+                    Icon(
+                        if (value.isBlank() && attachedImage == null) Icons.Default.Add else Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send"
+                    )
+                }
             }
         }
     }

@@ -41,15 +41,21 @@ fun DashboardScreen(
         val recentMeals = meals.filter { it.timestamp > last24h }
         NutrientData(
             fiber = recentMeals.sumOf { it.nutrients.fiber.toDouble() }.toFloat(),
+            resistantStarch = recentMeals.sumOf { it.nutrients.resistantStarch.toDouble() }.toFloat(),
             polyphenols = recentMeals.sumOf { it.nutrients.polyphenols.toDouble() }.toFloat(),
             sugar = recentMeals.sumOf { it.nutrients.sugar.toDouble() }.toFloat(),
-            saturatedFats = recentMeals.sumOf { it.nutrients.saturatedFats.toDouble() }.toFloat()
+            saturatedFats = recentMeals.sumOf { it.nutrients.saturatedFats.toDouble() }.toFloat(),
+            fermentedStatus = recentMeals.any { it.nutrients.fermentedStatus }
         )
     } else NutrientData()
 
-    val (healthScore, shifts) = remember(currentNutrients) {
-        val scorecard = MicrobeImpactCalculator.calculateGIE(currentNutrients)
-        scorecard.gutHealthScore to scorecard.predictedShifts
+    val (healthScore, shifts) = remember(currentNutrients, meals) {
+        if (meals.isEmpty()) {
+            50 to MicrobeImpactCalculator.calculateGIE(NutrientData()).predictedShifts
+        } else {
+            val scorecard = MicrobeImpactCalculator.calculateGIE(currentNutrients)
+            scorecard.gutHealthScore to scorecard.predictedShifts
+        }
     }
 
     // Calculate REAL growth percentage (compare last 7 days to previous 7 days)

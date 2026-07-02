@@ -146,6 +146,7 @@ class MainActivity : ComponentActivity() {
                                 GoogleAuthHelper.getSignInClient(this@MainActivity).signOut()
                                 sessionManager.clearSession()
                                 currentSession = AuthSession()
+                                viewModel.signOut()
                             },
                             viewModel = viewModel
                         )
