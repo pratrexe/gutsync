@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -52,6 +53,7 @@ import java.io.File
 fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
     var searchQuery by remember { mutableStateOf("") }
     var showManualDialog by remember { mutableStateOf(false) }
+    var mealToDelete by remember { mutableStateOf<com.example.gutsync.data.storage.MealLogEntry?>(null) }
     val appData by viewModel.appData.collectAsState()
     val analyzedFood by viewModel.analyzedFood.collectAsState()
     val openRouterExplanation by viewModel.openRouterExplanation.collectAsState()
@@ -340,7 +342,7 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
         }
 
         items(appData.meals.takeLast(10).reversed()) { entry ->
-            RealRecentItemRow(entry)
+            RealRecentItemRow(entry, onDelete = { mealToDelete = entry })
         }
 
         item { Spacer(modifier = Modifier.height(100.dp)) }
@@ -353,6 +355,28 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                 viewModel.logManualMeal(nutrients, bitmap)
                 showManualDialog = false
             }
+        )
+    }
+
+    if (mealToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { mealToDelete = null },
+            title = { Text("Delete Log?", color = Color.White) },
+            text = { Text("Are you sure you want to remove this meal from your history?", color = Color.White.copy(alpha = 0.7f)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteMeal(mealToDelete!!)
+                    mealToDelete = null
+                }) {
+                    Text("Delete", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { mealToDelete = null }) {
+                    Text("Cancel", color = Color.White)
+                }
+            },
+            containerColor = Color(0xFF1C1C1E)
         )
     }
 }
@@ -435,7 +459,10 @@ fun BioticRow(label: String, value: String) {
 }
 
 @Composable
-fun RealRecentItemRow(entry: com.example.gutsync.data.storage.MealLogEntry) {
+fun RealRecentItemRow(
+    entry: com.example.gutsync.data.storage.MealLogEntry,
+    onDelete: () -> Unit
+) {
     val nutrients = entry.nutrients
     val imageBitmap = remember(entry.imageBase64) {
         entry.imageBase64?.let { base64 ->
@@ -511,18 +538,29 @@ fun RealRecentItemRow(entry: com.example.gutsync.data.storage.MealLogEntry) {
                 )
             }
             
-            Surface(
-                color = Color.White.copy(alpha = 0.1f),
-                shape = CircleShape
-            ) {
-                val score = MicrobeImpactCalculator.calculateGIE(nutrients).gutHealthScore
-                Text(
-                    text = score.toString(),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    color = Color.White.copy(alpha = 0.1f),
+                    shape = CircleShape
+                ) {
+                    val score = MicrobeImpactCalculator.calculateGIE(nutrients).gutHealthScore
+                    Text(
+                        text = score.toString(),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Delete",
+                        tint = Color.Red.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }

@@ -146,6 +146,13 @@ class GutSyncRepository(private val context: Context) {
         saveData()
     }
 
+    suspend fun deleteMeal(meal: MealLogEntry) {
+        val currentMeals = _appData.value.meals.toMutableList()
+        currentMeals.removeIf { it.timestamp == meal.timestamp }
+        _appData.value = _appData.value.copy(meals = currentMeals)
+        saveData()
+    }
+
     suspend fun updateChatSession(session: ChatSession) {
         val currentSessions = _appData.value.chatSessions.toMutableList()
         val index = currentSessions.indexOfFirst { it.id == session.id }

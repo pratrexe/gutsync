@@ -281,6 +281,12 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun deleteMeal(meal: com.example.gutsync.data.storage.MealLogEntry) {
+        viewModelScope.launch {
+            repository.deleteMeal(meal)
+        }
+    }
+
     fun askFoodQuestion(question: String) {
         val bitmap = _chatImage.value
         val userMsg = ChatMessage(text = question, role = MessageRole.USER)

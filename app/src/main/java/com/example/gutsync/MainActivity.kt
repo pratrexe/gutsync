@@ -296,17 +296,17 @@ fun DynamicIslandNav(
             label = "indicator_offset"
         )
 
-        // 1. Base Glass Container (Heavy Material with Black Tint)
+        // 1. Base Glass Container (Heavy Material with Deep Black Tint)
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .blur(100.dp)
-                .background(Color.Black.copy(alpha = 0.3f)) // Added black tint
+                .background(Color.Black.copy(alpha = 0.5f)) // Stronger black tint
                 .border(
                     BorderStroke(
                         1.5.dp,
                         Brush.verticalGradient(
-                            listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)
+                            listOf(Color.White.copy(alpha = 0.15f), Color.Transparent)
                         )
                     ),
                     CircleShape
