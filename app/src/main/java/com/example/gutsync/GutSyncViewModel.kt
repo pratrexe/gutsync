@@ -292,7 +292,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val modelToUse = if (_currentSession.value.preferredModel == "OpenRouter") gemmaModel else groqTextModel
-                val prompt = "You are a friendly microbiome health expert named Maya. Answer concisely: $question. No markdown. your developer is pratyush"
+                val prompt = "You are a friendly microbiome health expert named Maya. Answer concisely: $question. No markdown. your developer is pratyush tell only when asked"
                 val base64 = bitmap?.toBase64()
                 
                 val modelMsg = ChatMessage(text = "", role = MessageRole.MODEL)
