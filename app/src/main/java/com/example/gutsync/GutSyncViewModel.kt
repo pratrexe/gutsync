@@ -106,21 +106,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val nutrientData = OFFClient.getProductByBarcode(barcode)
                 if (nutrientData != null) {
-                    val scorecard = MicrobeImpactCalculator.calculateGIE(nutrientData)
-                    val explanationPrompt = """
-                        Explain this Gut Health Score for ${nutrientData.foodName}: ${scorecard.gutHealthScore}/100.
-                        Nutrients (from Open Food Facts): Fiber: ${nutrientData.fiber}g, Sugar: ${nutrientData.sugar}g.
-                        Mention impact on Bifidobacterium, Lactobacillus, Akkermansia, and Bacteroides.
-                        Keep it concise and scientific. No markdown.
-                    """.trimIndent()
-                    
-                    val explanation = GroqClient.generateContent(
-                        prompt = explanationPrompt,
-                        model = gemmaModel,
-                        isJson = false
-                    ).replace("*", "").replace("#", "")
-
-                    _openRouterExplanation.value = explanation
+                    _openRouterExplanation.value = null // No AI explanation for barcode
                     _analyzedFood.value = nutrientData
                     _analysisState.value = UiState.Success("Barcode Analysis Complete")
                 } else {

@@ -36,6 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.UiState
 import com.example.gutsync.data.MicrobeImpactCalculator
@@ -169,11 +172,18 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                         .background(SurfaceContainerLow)
                         .border(1.dp, Color(0xFF2C2C2E), RoundedCornerShape(24.dp))
                         .clickable {
-                             if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                cameraLauncher.launch(photoUri)
-                            } else {
-                                permissionLauncher.launch(android.Manifest.permission.CAMERA)
-                            }
+                            val options = GmsBarcodeScannerOptions.Builder()
+                                .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
+                                .enableAutoZoom()
+                                .build()
+                            val scanner = GmsBarcodeScanning.getClient(context, options)
+                            scanner.startScan()
+                                .addOnSuccessListener { barcode ->
+                                    barcode.rawValue?.let { viewModel.analyzeBarcode(it) }
+                                }
+                                .addOnFailureListener { e ->
+                                    // Handle failure or cancellation
+                                }
                         },
                     contentAlignment = Alignment.Center
                 ) {
