@@ -113,13 +113,21 @@ object GroqClient {
                 })
             })
 
-            if (isNvidiaModel(model)) {
-                put("max_tokens", 16384)
-                put("temperature", 1.00)
-                put("top_p", 0.95)
-                put("chat_template_kwargs", JSONObject().apply {
-                    put("enable_thinking", true)
-                })
+            // Model-specific optimized settings
+            when {
+                isNvidiaModel(model) -> {
+                    put("max_tokens", 16384)
+                    put("temperature", 1.00)
+                    put("top_p", 0.95)
+                    put("chat_template_kwargs", JSONObject().apply {
+                        put("enable_thinking", true)
+                    })
+                }
+                model == "meta-llama/llama-4-scout-17b-16e-instruct" -> {
+                    put("max_completion_tokens", 1024)
+                    put("temperature", 1.00)
+                    put("top_p", 1.00)
+                }
             }
 
             if (isJson && base64Image == null) {

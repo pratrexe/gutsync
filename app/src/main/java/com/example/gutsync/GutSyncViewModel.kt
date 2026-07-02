@@ -60,6 +60,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
 
     // AI Models
     private val gemmaModel = "google/gemma-4-31b-it:free"
+    private val llamaScoutModel = "meta-llama/llama-4-scout-17b-16e-instruct"
     private val groqTextModel = "llama-3.3-70b-versatile"
 
     private fun Bitmap.toBase64(): String {
@@ -140,16 +141,29 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val visionPrompt = "Identify the primary food item in this image. Return ONLY the name of the food, nothing else."
                 val base64 = bitmap.toBase64()
-                val result = GroqClient.generateContent(
-                    prompt = visionPrompt,
-                    model = gemmaModel,
-                    isJson = false,
-                    base64Image = base64
-                ).trim().replace(".", "").replace("*", "")
                 
-                _identifiedFoodName.value = result
+                var result = try {
+                    GroqClient.generateContent(
+                        prompt = visionPrompt,
+                        model = gemmaModel,
+                        isJson = false,
+                        base64Image = base64
+                    )
+                } catch (e: Exception) {
+                    Log.e("GutSyncViewModel", "Gemma exhausted, falling back to Llama 4 Scout", e)
+                    GroqClient.generateContent(
+                        prompt = visionPrompt,
+                        model = llamaScoutModel,
+                        isJson = false,
+                        base64Image = base64
+                    )
+                }
+
+                val cleanResult = result.trim().replace(".", "").replace("*", "").replace("#", "")
+                _identifiedFoodName.value = cleanResult
                 _analysisState.value = UiState.Initial
             } catch (e: Exception) {
+                Log.e("GutSyncViewModel", "All vision identification failed", e)
                 _analysisState.value = UiState.Error("Identification failed: ${e.localizedMessage}")
             }
         }
@@ -231,11 +245,20 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                     Keep it concise and scientific. No markdown symbols.
                 """.trimIndent()
                 
-                val explanation = GroqClient.generateContent(
-                    prompt = explanationPrompt,
-                    model = gemmaModel,
-                    isJson = false
-                ).replace("*", "").replace("#", "")
+                val explanation = try {
+                    GroqClient.generateContent(
+                        prompt = explanationPrompt,
+                        model = gemmaModel,
+                        isJson = false
+                    )
+                } catch (e: Exception) {
+                    Log.e("GutSyncViewModel", "Gemma exhausted for explanation, falling back to Llama 4 Scout", e)
+                    GroqClient.generateContent(
+                        prompt = explanationPrompt,
+                        model = llamaScoutModel,
+                        isJson = false
+                    )
+                }.replace("*", "").replace("#", "")
 
                 _openRouterExplanation.value = explanation
                 _analyzedFood.value = nutrientData
