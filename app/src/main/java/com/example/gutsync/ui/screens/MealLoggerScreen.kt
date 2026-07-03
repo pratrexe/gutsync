@@ -235,66 +235,6 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
             }
         }
 
-        // --- TRENDS INSERTION ---
-        
-        // Biological Insight
-        item {
-            val mostImpactedMicrobe = appData.meals.takeLast(20)
-                .flatMap { MicrobeImpactCalculator.calculateGIE(it.nutrients).predictedShifts }
-                .groupBy { it.microbeType }
-                .mapValues { it.value.sumOf { shift -> shift.shiftPercentage.toDouble() } }
-                .maxByOrNull { it.value }
-            
-            val insightText = if (mostImpactedMicrobe != null && mostImpactedMicrobe.value > 0) {
-                "Your ${mostImpactedMicrobe.key.displayName} family is showing strong positive growth."
-            } else if (appData.meals.isEmpty()) {
-                "Log your first meal to start calculating biological trends."
-            } else {
-                "Your gut microbiome is stabilizing. Maintain diverse fiber intake."
-            }
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF303030)),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                        Text(text = "BIOLOGICAL INSIGHT", fontSize = 10.sp, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text(text = insightText, fontSize = 16.sp, color = Color.White, lineHeight = 24.sp)
-                }
-            }
-        }
-
-        // Mini Trend Graph
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF303030)),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(text = "Weekly Score Progress", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(180.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        graphData.forEach { (label, progress) ->
-                            TrendBar(label, progress)
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- END TRENDS INSERTION ---
-
         // 3. Quantity and Search
         if (identifiedFoodName != null || searchQuery.isNotBlank()) {
             item {
@@ -422,6 +362,66 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                 }
             }
         }
+
+        // --- TRENDS INSERTION ---
+        
+        // Biological Insight
+        item {
+            val mostImpactedMicrobe = appData.meals.takeLast(20)
+                .flatMap { MicrobeImpactCalculator.calculateGIE(it.nutrients).predictedShifts }
+                .groupBy { it.microbeType }
+                .mapValues { it.value.sumOf { shift -> shift.shiftPercentage.toDouble() } }
+                .maxByOrNull { it.value }
+            
+            val insightText = if (mostImpactedMicrobe != null && mostImpactedMicrobe.value > 0) {
+                "Your ${mostImpactedMicrobe.key.displayName} family is showing strong positive growth."
+            } else if (appData.meals.isEmpty()) {
+                "Log your first meal to start calculating biological trends."
+            } else {
+                "Your gut microbiome is stabilizing. Maintain diverse fiber intake."
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF303030)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        Text(text = "BIOLOGICAL INSIGHT", fontSize = 10.sp, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(text = insightText, fontSize = 16.sp, color = Color.White, lineHeight = 24.sp)
+                }
+            }
+        }
+
+        // Mini Trend Graph
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF303030)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(text = "Weekly Score Progress", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(180.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        graphData.forEach { (label, progress) ->
+                            TrendBar(label, progress)
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- END TRENDS INSERTION ---
 
         // 5. Recent Logs
         item {

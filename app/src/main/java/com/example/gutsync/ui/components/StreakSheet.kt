@@ -190,30 +190,6 @@ fun StreakSheetContent(
             }
 
             Spacer(modifier = Modifier.weight(1f))
-
-            // Check-in Button
-            val isTodayDone = isCheckInDoneToday(profile.lastCheckInTimestamp)
-            Button(
-                onClick = {
-                    viewModel.performCheckIn()
-                    onDismiss()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                enabled = !isTodayDone,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isTodayDone) Color.White.copy(alpha = 0.1f) else Color.White,
-                    contentColor = Color.Black
-                ),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text(
-                    text = if (isTodayDone) "Checked In for Today" else "Complete Today's Check-In",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
             Spacer(modifier = Modifier.height(20.dp))
         }
     }

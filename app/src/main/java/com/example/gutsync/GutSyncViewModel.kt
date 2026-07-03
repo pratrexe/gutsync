@@ -307,6 +307,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 _capturedImage.value = null
                 _openRouterExplanation.value = null
                 _identifiedFoodName.value = null
+                performCheckIn()
             }
         }
     }
@@ -315,6 +316,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         val base64 = bitmap?.toBase64()
         viewModelScope.launch {
             repository.addMeal(nutrients, imageBase64 = base64)
+            performCheckIn()
         }
     }
 
