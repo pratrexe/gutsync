@@ -170,6 +170,11 @@ class GutSyncRepository(private val context: Context) {
         saveData()
     }
 
+    suspend fun updateDietPlan(plan: String) {
+        _appData.value = _appData.value.copy(dietPlan = plan)
+        saveData()
+    }
+
     suspend fun importMeals(meals: List<MealLogEntry>) {
         val currentMeals = _appData.value.meals.toMutableList()
         currentMeals.addAll(meals)

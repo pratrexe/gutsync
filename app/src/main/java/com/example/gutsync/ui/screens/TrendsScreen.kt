@@ -223,7 +223,7 @@ fun TrendBar(label: String, progress: Float) {
         Box(
             modifier = Modifier
                 .width(24.dp)
-                .fillMaxHeight(0.8f)
+                .weight(1f)
                 .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
                 .background(Color.White.copy(alpha = 0.05f)),
             contentAlignment = Alignment.BottomCenter

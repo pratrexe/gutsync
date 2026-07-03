@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AddCircle
@@ -46,8 +47,16 @@ import com.example.gutsync.data.auth.GoogleAuthHelper
 import com.example.gutsync.data.auth.SessionManager
 import com.example.gutsync.ui.components.LiquidBackground
 import com.example.gutsync.ui.components.GutsyncLoadingAnimation
+import com.example.gutsync.ui.components.StreakSheetContent
+import androidx.compose.foundation.shape.GenericShape
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.util.lerp
+import androidx.compose.ui.unit.lerp as lerpDp
 import com.example.gutsync.ui.screens.*
 import com.example.gutsync.ui.theme.GutsyncTheme
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import kotlin.math.roundToInt
@@ -188,6 +197,7 @@ fun MainNavigation(
 ) {
     val appData by viewModel.appData.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showStreakSheet by remember { mutableStateOf(false) }
     
     // Check if user needs onboarding
     if (!appData.profile.isOnboarded) {
@@ -205,11 +215,6 @@ fun MainNavigation(
 
     // Scroll state for hiding navigation
     var navVisible by remember { mutableStateOf(true) }
-    val navOffset by animateFloatAsState(
-        targetValue = if (navVisible) 0f else 300f,
-        animationSpec = tween(durationMillis = 800),
-        label = "nav_offset"
-    )
 
     val nestedScrollConnection = remember(selectedTab) {
         object : NestedScrollConnection {
@@ -246,38 +251,124 @@ fun MainNavigation(
             Surface(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
+                    .padding(innerPadding)
+                    .blur(if (showStreakSheet) 20.dp else 0.dp),
                 color = Color.Transparent
             ) {
                 when (selectedTab) {
-                    0 -> DashboardScreen(
-                        viewModel = viewModel
-                    )
+                    0 -> DashboardScreen(viewModel = viewModel)
                     1 -> MealLoggerScreen(viewModel = viewModel)
                     2 -> TrendsScreen(viewModel = viewModel)
                     3 -> AskCooperScreen(session = session, viewModel = viewModel)
-                    4 -> SettingsScreen(
-                        session = session,
-                        onConnectDrive = onConnectDrive,
-                        onSignOut = onSignOut
-                    )
+                    4 -> SettingsScreen(session = session, onConnectDrive = onConnectDrive, onSignOut = onSignOut)
                 }
             }
+        }
+
+        val expansionProgress by animateFloatAsState(
+            targetValue = if (showStreakSheet) 1f else 0f,
+            animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioNoBouncy),
+            label = "expansion"
+        )
+
+        val pointyShape = remember(expansionProgress) {
+            GenericShape { size, _ ->
+                val width = size.width
+                val height = size.height
+                val cornerRadius = 40.dp.value
+                val peakHeight = 25.dp.value * expansionProgress
+                
+                moveTo(0f, cornerRadius + peakHeight)
+                
+                // Left side
+                lineTo(0f, cornerRadius + peakHeight)
+                // Top-left corner
+                quadraticTo(0f, peakHeight, cornerRadius, peakHeight)
+                
+                // The "Soft ^" Arc
+                // We move from the left side towards the center peak with a smooth curve
+                cubicTo(
+                    width * 0.25f, peakHeight, // first control point
+                    width * 0.35f, 0f,         // second control point
+                    width / 2f, 0f             // destination (peak)
+                )
+                cubicTo(
+                    width * 0.65f, 0f,         // first control point
+                    width * 0.75f, peakHeight, // second control point
+                    width - cornerRadius, peakHeight // destination
+                )
+                
+                // Top-right corner
+                quadraticTo(width, peakHeight, width, peakHeight + cornerRadius)
+                
+                // Rest of the box
+                lineTo(width, height)
+                lineTo(0f, height)
+                close()
+            }
+        }
+
+        if (expansionProgress > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f * expansionProgress))
+                    .clickable { showStreakSheet = false }
+            )
         }
 
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .offset { IntOffset(0, navOffset.roundToInt()) }
-                .padding(bottom = 32.dp),
-            contentAlignment = Alignment.Center
+                .padding(bottom = 32.dp)
+                .widthIn(max = 380.dp)
+                .fillMaxWidth(0.9f)
+                // Animate height from 70.dp to 75% height
+                .fillMaxHeight(lerp(0.08f, 0.75f, expansionProgress)) 
+                .clip(pointyShape)
+                .background(Color.Black.copy(alpha = lerp(0.7f, 0.9f, expansionProgress)))
+                .border(
+                    1.dp,
+                    Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.2f * expansionProgress), Color.Transparent)
+                    ),
+                    pointyShape
+                )
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { _, dragAmount ->
+                        if (dragAmount < -20f) showStreakSheet = true
+                        if (dragAmount > 20f) showStreakSheet = false
+                    }
+                }
         ) {
-            DynamicIslandNav(
-                tabs = tabs,
-                selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it }
-            )
+            // Icons fade out
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(70.dp)
+                    .alpha(1f - (expansionProgress * 2f).coerceAtMost(1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                DynamicIslandNav(
+                    tabs = tabs,
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it }
+                )
+            }
+
+            // Streak Content fades in
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha((expansionProgress - 0.5f).coerceAtLeast(0f) * 2f)
+            ) {
+                if (expansionProgress > 0.5f) {
+                    StreakSheetContent(
+                        viewModel = viewModel,
+                        onDismiss = { showStreakSheet = false }
+                    )
+                }
+            }
         }
     }
 }
@@ -291,7 +382,7 @@ fun DynamicIslandNav(
     BoxWithConstraints(
         modifier = Modifier
             .height(70.dp)
-            .widthIn(max = 350.dp)
+            .widthIn(max = 380.dp)
             .clip(CircleShape)
     ) {
         val totalWidth = maxWidth

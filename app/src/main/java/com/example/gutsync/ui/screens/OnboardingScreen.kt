@@ -27,7 +27,10 @@ fun OnboardingScreen(viewModel: GutSyncViewModel, onComplete: () -> Unit) {
     var currentStep by remember { mutableIntStateOf(0) }
     
     // Step 0 Data
-    val dietTypes = listOf("Balanced", "Vegan", "Vegetarian", "Keto", "Paleo", "Low Carb", "High Protein")
+    val dietTypes = listOf(
+        "Balanced", "Vegan", "Vegetarian", "Keto", "Paleo", 
+        "Low Carb", "High Protein", "Mediterranean", "Carnivore", "Pescatarian"
+    )
     var selectedDiet by remember { mutableStateOf("Balanced") }
     
     // Step 1 Data

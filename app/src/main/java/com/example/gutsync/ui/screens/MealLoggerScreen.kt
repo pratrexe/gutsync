@@ -1,11 +1,10 @@
 package com.example.gutsync.ui.screens
 
 import android.graphics.Bitmap
-import android.net.Uri
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.launch
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,13 +20,13 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -46,8 +45,11 @@ import com.example.gutsync.data.MicrobeImpactCalculator
 import com.example.gutsync.data.NutrientData
 import com.example.gutsync.ui.components.GutsyncLoadingAnimation
 import com.example.gutsync.ui.theme.SurfaceContainerLow
+import com.example.gutsync.ui.theme.SurfaceContainerLowest
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
@@ -88,6 +90,40 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                 e.printStackTrace()
             }
         }
+    }
+
+    // Process Trend Data
+    val graphData = remember(appData.meals) {
+        (0 until 7).map { daysAgo ->
+            val dayCalendar = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, -daysAgo)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val dayStart = dayCalendar.timeInMillis
+            val dayEnd = dayStart + (24 * 60 * 60 * 1000)
+            
+            val dayMeals = appData.meals.filter { it.timestamp in dayStart until dayEnd }
+            val dayNutrients = NutrientData(
+                fiber = dayMeals.sumOf { it.nutrients.fiber.toDouble() }.toFloat(),
+                polyphenols = dayMeals.sumOf { it.nutrients.polyphenols.toDouble() }.toFloat(),
+                sugar = dayMeals.sumOf { it.nutrients.sugar.toDouble() }.toFloat(),
+                saturatedFats = dayMeals.sumOf { it.nutrients.saturatedFats.toDouble() }.toFloat(),
+                fermentedStatus = dayMeals.any { it.nutrients.fermentedStatus }
+            )
+            
+            val scorecard = MicrobeImpactCalculator.calculateGIE(dayNutrients)
+            val healthScore = if (dayMeals.isEmpty()) 0f else scorecard.gutHealthScore.toFloat()
+            
+            val dayLabel = when(daysAgo) {
+                0 -> "Today"
+                1 -> "Yesterday"
+                else -> SimpleDateFormat("E", Locale.getDefault()).format(dayCalendar.time)
+            }
+            dayLabel to (healthScore / 100f).coerceIn(0f, 1f)
+        }.reversed()
     }
 
     LazyColumn(
@@ -198,6 +234,66 @@ fun MealLoggerScreen(viewModel: GutSyncViewModel = viewModel()) {
                 }
             }
         }
+
+        // --- TRENDS INSERTION ---
+        
+        // Biological Insight
+        item {
+            val mostImpactedMicrobe = appData.meals.takeLast(20)
+                .flatMap { MicrobeImpactCalculator.calculateGIE(it.nutrients).predictedShifts }
+                .groupBy { it.microbeType }
+                .mapValues { it.value.sumOf { shift -> shift.shiftPercentage.toDouble() } }
+                .maxByOrNull { it.value }
+            
+            val insightText = if (mostImpactedMicrobe != null && mostImpactedMicrobe.value > 0) {
+                "Your ${mostImpactedMicrobe.key.displayName} family is showing strong positive growth."
+            } else if (appData.meals.isEmpty()) {
+                "Log your first meal to start calculating biological trends."
+            } else {
+                "Your gut microbiome is stabilizing. Maintain diverse fiber intake."
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF303030)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        Text(text = "BIOLOGICAL INSIGHT", fontSize = 10.sp, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(text = insightText, fontSize = 16.sp, color = Color.White, lineHeight = 24.sp)
+                }
+            }
+        }
+
+        // Mini Trend Graph
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF303030)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(text = "Weekly Score Progress", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(180.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        graphData.forEach { (label, progress) ->
+                            TrendBar(label, progress)
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- END TRENDS INSERTION ---
 
         // 3. Quantity and Search
         if (identifiedFoodName != null || searchQuery.isNotBlank()) {

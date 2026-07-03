@@ -114,7 +114,44 @@ fun DashboardScreen(
                 healthScore < 80 -> "Building Stability" to "Good progress! Your microbiome is stabilizing. Add more fermented foods to boost Lactobacillus."
                 else -> "Optimal Diversity" to "Excellent! Your dietary patterns are promoting a highly diverse and stable microbial environment."
             }
-            InsightCard(title = "Focus: ${insight.first}", description = insight.second)
+            
+            var showPlanDialog by remember { mutableStateOf(false) }
+            val dietPlan = appData.dietPlan
+
+            InsightCard(
+                title = "Focus: ${insight.first}", 
+                description = insight.second,
+                hasPlan = dietPlan != null,
+                onAction = {
+                    if (dietPlan != null) {
+                        showPlanDialog = true
+                    } else {
+                        viewModel.generateAiDietPlan()
+                    }
+                }
+            )
+
+            if (showPlanDialog && dietPlan != null) {
+                AlertDialog(
+                    onDismissRequest = { showPlanDialog = false },
+                    title = { Text("AI Diet Plan") },
+                    text = { 
+                        Box(modifier = Modifier.heightIn(max = 400.dp)) {
+                            LazyColumn {
+                                item { Text(dietPlan) }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showPlanDialog = false }) {
+                            Text("Close")
+                        }
+                    },
+                    containerColor = SurfaceContainerLowest,
+                    titleContentColor = Color.White,
+                    textContentColor = Color.White
+                )
+            }
         }
 
         item { Spacer(modifier = Modifier.height(100.dp)) }
@@ -323,7 +360,7 @@ fun MicrobeStatusCard(type: MicrobeType, percentage: Int, status: String, modifi
 }
 
 @Composable
-fun InsightCard(title: String, description: String) {
+fun InsightCard(title: String, description: String, hasPlan: Boolean, onAction: () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(12.dp),
@@ -344,12 +381,16 @@ fun InsightCard(title: String, description: String) {
                 modifier = Modifier.padding(vertical = 16.dp)
             )
             Button(
-                onClick = {},
+                onClick = onAction,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
                 shape = CircleShape,
                 contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
             ) {
-                Text(text = "View Diet Plan", color = Color.White, fontSize = 14.sp)
+                Text(
+                    text = if (hasPlan) "View Diet Plan" else "Generate AI Diet Plan", 
+                    color = Color.White, 
+                    fontSize = 14.sp
+                )
             }
         }
     }

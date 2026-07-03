@@ -23,9 +23,68 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.util.Calendar
 
 class GutSyncViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = GutSyncRepository(application)
+    val appData: StateFlow<AppData> = repository.appData
+
+    init {
+        viewModelScope.launch {
+            appData.collect {
+                if (it.profile.isOnboarded) {
+                    syncStreaks()
+                }
+            }
+        }
+    }
+
+    private fun syncStreaks() {
+        val profile = appData.value.profile
+        if (profile.lastCheckInTimestamp == 0L) return
+
+        val last = Calendar.getInstance().apply { timeInMillis = profile.lastCheckInTimestamp }
+
+        // Start of today
+        val today = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        // Check if last check-in was yesterday or today
+        val yesterday = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
+        
+        if (last.after(yesterday)) {
+            // Already checked in today or yesterday, streak is safe
+            return
+        }
+
+        // Missed one or more days
+        val daysMissed = ((today.timeInMillis - last.timeInMillis) / (24 * 60 * 60 * 1000)).toInt()
+        
+        if (daysMissed > 0) {
+            viewModelScope.launch {
+                var currentFreezes = profile.streakFreezes
+                var currentStreak = profile.streakCount
+                
+                if (currentFreezes >= daysMissed) {
+                    // Used freezes
+                    currentFreezes -= daysMissed
+                } else {
+                    // Streak broken
+                    currentStreak = 0
+                }
+                
+                // Update profile but keep lastCheckInTimestamp old to not count it as a check-in
+                repository.updateProfile(profile.copy(
+                    streakCount = currentStreak,
+                    streakFreezes = currentFreezes
+                ))
+            }
+        }
+    }
 
     private val _analysisState: MutableStateFlow<UiState> =
         MutableStateFlow(UiState.Initial)
@@ -36,8 +95,6 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         MutableStateFlow(UiState.Initial)
     val chatState: StateFlow<UiState> =
         _chatState.asStateFlow()
-
-    val appData: StateFlow<AppData> = repository.appData
 
     private val _analyzedFood: MutableStateFlow<NutrientData?> = MutableStateFlow(null)
     val analyzedFood: StateFlow<NutrientData?> = _analyzedFood.asStateFlow()
@@ -315,6 +372,37 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun generateAiDietPlan() {
+        _chatState.value = UiState.Loading
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val profile = appData.value.profile
+                val recentMeals = appData.value.meals.takeLast(10)
+                val healthContext = """
+                    User Profile: Diet=${profile.dietType}, Age=${profile.age}, Health=${profile.healthConditions.joinToString()}.
+                    Recent Food History: ${recentMeals.joinToString { it.nutrients.foodName }}
+                """.trimIndent()
+
+                val prompt = """
+                    As Maya, a microbiome expert, generate a 1-day pro-active anti-inflammatory diet plan for this user.
+                    Context: $healthContext
+                    Focus on increasing Bifidobacterium and Akkermansia. 
+                    Structure it by Breakfast, Lunch, Dinner, and Snacks. 
+                    Keep it scientific but practical. No markdown symbols.
+                """.trimIndent()
+
+                val result = GroqClient.generateContent(prompt, model = groqTextModel)
+                val cleanResult = result.replace("*", "").replace("#", "")
+
+                repository.updateDietPlan(cleanResult)
+                _chatState.value = UiState.Success("Diet Plan Generated")
+            } catch (e: Exception) {
+                Log.e("GutSyncViewModel", "Diet Plan Error", e)
+                _chatState.value = UiState.Error("Failed to generate diet plan: ${e.localizedMessage}")
+            }
+        }
+    }
+
     fun askFoodQuestion(question: String) {
         val bitmap = _chatImage.value
         val userMsg = ChatMessage(text = question, role = MessageRole.USER)
@@ -409,6 +497,48 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
             if (meals.isNotEmpty()) {
                 repository.importMeals(meals)
             }
+        }
+    }
+
+    fun performCheckIn() {
+        viewModelScope.launch {
+            val profile = appData.value.profile
+            val now = System.currentTimeMillis()
+            val calendar = Calendar.getInstance()
+            calendar.timeInMillis = now
+            
+            // Monday is 2 in Calendar.DAY_OF_WEEK (in US locale, but let's be safe)
+            // Adjust to 0-6 (Mon-Sun)
+            val dayOfWeek = (calendar.get(Calendar.DAY_OF_WEEK) + 5) % 7
+            
+            // Check if already checked in today
+            val lastCheckIn = Calendar.getInstance()
+            lastCheckIn.timeInMillis = profile.lastCheckInTimestamp
+            val isSameDay = calendar.get(Calendar.YEAR) == lastCheckIn.get(Calendar.YEAR) &&
+                           calendar.get(Calendar.DAY_OF_YEAR) == lastCheckIn.get(Calendar.DAY_OF_YEAR)
+            
+            if (isSameDay) return@launch
+
+            val newWeekly = profile.weeklyCheckIns.toMutableList()
+            
+            // Logic to reset week if it's a new week
+            val startOfWeek = calendar.clone() as Calendar
+            startOfWeek.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+            startOfWeek.set(Calendar.HOUR_OF_DAY, 0)
+            
+            if (profile.lastCheckInTimestamp < startOfWeek.timeInMillis) {
+                // New week! Reset freezes and weekly checkins
+                for (i in 0..6) newWeekly[i] = false
+            }
+
+            newWeekly[dayOfWeek] = true
+            
+            val updatedProfile = profile.copy(
+                streakCount = profile.streakCount + 1,
+                lastCheckInTimestamp = now,
+                weeklyCheckIns = newWeekly
+            )
+            repository.updateProfile(updatedProfile)
         }
     }
 }
