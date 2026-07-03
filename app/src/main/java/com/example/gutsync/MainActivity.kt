@@ -1,37 +1,30 @@
 package com.example.gutsync
 
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.border
-import androidx.compose.ui.draw.scale
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.AddCircle
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -41,31 +34,21 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gutsync.data.auth.AccountType
 import com.example.gutsync.data.auth.AuthSession
 import com.example.gutsync.data.auth.GoogleAuthHelper
 import com.example.gutsync.data.auth.SessionManager
-import com.example.gutsync.ui.components.LiquidBackground
 import com.example.gutsync.ui.components.GutsyncLoadingAnimation
-import com.example.gutsync.ui.components.StreakSheetContent
-import androidx.compose.foundation.shape.GenericShape
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.util.lerp
-import androidx.compose.ui.unit.lerp as lerpDp
+import com.example.gutsync.ui.components.LiquidBackground
 import com.example.gutsync.ui.screens.*
 import com.example.gutsync.ui.theme.GutsyncTheme
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
-import kotlin.math.roundToInt
-import androidx.lifecycle.viewmodel.compose.viewModel
-
-import android.util.Log
 import com.google.android.gms.common.api.CommonStatusCodes
-
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     private lateinit var sessionManager: SessionManager
@@ -197,7 +180,6 @@ fun MainNavigation(
 ) {
     val appData by viewModel.appData.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
-    var showStreakSheet by remember { mutableStateOf(false) }
     
     // Check if user needs onboarding
     if (!appData.profile.isOnboarded) {
@@ -208,18 +190,22 @@ fun MainNavigation(
     val tabs = listOf(
         NavigationItem("Home", Icons.Default.Home),
         NavigationItem("Log", Icons.Default.AddCircle),
-        NavigationItem("Trends", Icons.Default.BarChart),
+        NavigationItem("Streaks", Icons.Default.LocalFireDepartment),
         NavigationItem("Maya", Icons.Default.AutoAwesome),
         NavigationItem("Settings", Icons.Default.Settings)
     )
 
     // Scroll state for hiding navigation
     var navVisible by remember { mutableStateOf(true) }
+    val navOffset by animateFloatAsState(
+        targetValue = if (navVisible) 0f else 300f,
+        animationSpec = tween(durationMillis = 800),
+        label = "nav_offset"
+    )
 
     val nestedScrollConnection = remember(selectedTab) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // Do not hide the "pill" navigation in the AI chatting page
                 if (selectedTab == 3) {
                     if (!navVisible) navVisible = true
                     return Offset.Zero
@@ -235,7 +221,6 @@ fun MainNavigation(
         }
     }
 
-    // Ensure nav is visible when entering Cooper screen
     LaunchedEffect(selectedTab) {
         if (selectedTab == 3) navVisible = true
     }
@@ -251,124 +236,36 @@ fun MainNavigation(
             Surface(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .blur(if (showStreakSheet) 20.dp else 0.dp),
+                    .padding(innerPadding),
                 color = Color.Transparent
             ) {
                 when (selectedTab) {
                     0 -> DashboardScreen(viewModel = viewModel)
                     1 -> MealLoggerScreen(viewModel = viewModel)
                     2 -> TrendsScreen(viewModel = viewModel)
-                    3 -> AskCooperScreen(session = session, viewModel = viewModel)
-                    4 -> SettingsScreen(session = session, onConnectDrive = onConnectDrive, onSignOut = onSignOut)
+                    3 -> AskCooperScreen(viewModel = viewModel)
+                    4 -> SettingsScreen(
+                        session = session,
+                        onConnectDrive = onConnectDrive,
+                        onSignOut = onSignOut
+                    )
                 }
             }
-        }
-
-        val expansionProgress by animateFloatAsState(
-            targetValue = if (showStreakSheet) 1f else 0f,
-            animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioNoBouncy),
-            label = "expansion"
-        )
-
-        val pointyShape = remember(expansionProgress) {
-            GenericShape { size, _ ->
-                val width = size.width
-                val height = size.height
-                val cornerRadius = 40.dp.value
-                val peakHeight = 25.dp.value * expansionProgress
-                
-                moveTo(0f, cornerRadius + peakHeight)
-                
-                // Left side
-                lineTo(0f, cornerRadius + peakHeight)
-                // Top-left corner
-                quadraticTo(0f, peakHeight, cornerRadius, peakHeight)
-                
-                // The "Soft ^" Arc
-                // We move from the left side towards the center peak with a smooth curve
-                cubicTo(
-                    width * 0.25f, peakHeight, // first control point
-                    width * 0.35f, 0f,         // second control point
-                    width / 2f, 0f             // destination (peak)
-                )
-                cubicTo(
-                    width * 0.65f, 0f,         // first control point
-                    width * 0.75f, peakHeight, // second control point
-                    width - cornerRadius, peakHeight // destination
-                )
-                
-                // Top-right corner
-                quadraticTo(width, peakHeight, width, peakHeight + cornerRadius)
-                
-                // Rest of the box
-                lineTo(width, height)
-                lineTo(0f, height)
-                close()
-            }
-        }
-
-        if (expansionProgress > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f * expansionProgress))
-                    .clickable { showStreakSheet = false }
-            )
         }
 
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp)
-                .widthIn(max = 380.dp)
-                .fillMaxWidth(0.9f)
-                // Animate height from 70.dp to 75% height
-                .fillMaxHeight(lerp(0.08f, 0.75f, expansionProgress)) 
-                .clip(pointyShape)
-                .background(Color.Black.copy(alpha = lerp(0.7f, 0.9f, expansionProgress)))
-                .border(
-                    1.dp,
-                    Brush.verticalGradient(
-                        listOf(Color.White.copy(alpha = 0.2f * expansionProgress), Color.Transparent)
-                    ),
-                    pointyShape
-                )
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures { _, dragAmount ->
-                        if (dragAmount < -20f) showStreakSheet = true
-                        if (dragAmount > 20f) showStreakSheet = false
-                    }
-                }
+                .fillMaxWidth()
+                .offset { IntOffset(0, navOffset.roundToInt()) }
+                .padding(bottom = 32.dp),
+            contentAlignment = Alignment.Center
         ) {
-            // Icons fade out
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(70.dp)
-                    .alpha(1f - (expansionProgress * 2f).coerceAtMost(1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                DynamicIslandNav(
-                    tabs = tabs,
-                    selectedTab = selectedTab,
-                    onTabSelected = { selectedTab = it }
-                )
-            }
-
-            // Streak Content fades in
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha((expansionProgress - 0.5f).coerceAtLeast(0f) * 2f)
-            ) {
-                if (expansionProgress > 0.5f) {
-                    StreakSheetContent(
-                        viewModel = viewModel,
-                        onDismiss = { showStreakSheet = false }
-                    )
-                }
-            }
+            DynamicIslandNav(
+                tabs = tabs,
+                selectedTab = selectedTab,
+                onTabSelected = { selectedTab = it }
+            )
         }
     }
 }
@@ -388,19 +285,17 @@ fun DynamicIslandNav(
         val totalWidth = maxWidth
         val tabWidth = totalWidth / tabs.size
         
-        // Animated indicator offset
         val indicatorOffset by animateDpAsState(
             targetValue = tabWidth * selectedTab,
             animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioLowBouncy),
             label = "indicator_offset"
         )
 
-        // 1. Base Glass Container (Heavy Material with Deep Black Tint)
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .blur(100.dp)
-                .background(Color.Black.copy(alpha = 0.5f)) // Stronger black tint
+                .background(Color.Black.copy(alpha = 0.5f))
                 .border(
                     BorderStroke(
                         1.5.dp,
@@ -412,7 +307,6 @@ fun DynamicIslandNav(
                 )
         )
 
-        // 2. Sliding Indicator (The "Pill") - Deeply Opaque
         Box(
             modifier = Modifier
                 .padding(6.dp)
@@ -420,8 +314,8 @@ fun DynamicIslandNav(
                 .width(tabWidth - 12.dp)
                 .fillMaxHeight()
                 .clip(CircleShape)
-                .blur(40.dp) // Softens the internal edges even more
-                .background(Color.Black.copy(alpha = 0.85f)) // Almost opaque black
+                .blur(40.dp)
+                .background(Color.Black.copy(alpha = 0.85f))
                 .border(
                     BorderStroke(
                         1.dp,
@@ -433,7 +327,6 @@ fun DynamicIslandNav(
                 )
         )
 
-        // 3. Icons Layer
         Row(
             modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically

@@ -45,12 +45,6 @@ fun StreakSheetContent(
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        StreakAnimatedBackground(
-            modifier = Modifier
-                .fillMaxSize()
-                .blur(30.dp)
-        )
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
