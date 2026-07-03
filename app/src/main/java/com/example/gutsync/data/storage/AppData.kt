@@ -15,7 +15,13 @@ data class AppData(
 data class UserProfile(
     val fiberGoal: Int = 30,
     val polyphenolGoal: Int = 500,
-    val resistantStarchGoal: Int = 15
+    val resistantStarchGoal: Int = 15,
+    val healthConditions: List<String> = emptyList(),
+    val dietType: String = "Normal",
+    val age: Int = 25,
+    val height: Float = 170f, // in cm
+    val weight: Float = 70f, // in kg
+    val isOnboarded: Boolean = false
 )
 
 @Serializable

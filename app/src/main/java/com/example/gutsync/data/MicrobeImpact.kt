@@ -79,11 +79,11 @@ object MicrobeImpactCalculator {
         shifts.add(MicrobeShift(MicrobeType.BACTEROIDES, bacterShift, 60))
 
         // 4. Synthesize Aggregate Scores
-        val diversity = ((bifidoLactoBase * 0.7f) + (akkerImpact * 0.3f)).toInt().coerceIn(10, 100)
-        val inflammation = bacterPenalty.toInt().coerceIn(0, 100)
+        val diversity = ((bifidoLactoBase * 0.7f) + (akkerImpact * 0.3f)).toInt().coerceIn(0, 100)
+        val inflammation = (bacterPenalty * 0.7f).toInt().coerceIn(0, 100) // Reduced weight of inflammation
         
-        // Strict calculation: Start at a baseline of 35 to show activity even with low data.
-        val overall = (35 + (diversity * 0.65f) - (inflammation * 0.35f)).toInt().coerceIn(10, 100)
+        // Balanced calculation: Start at 0, but less punitive.
+        val overall = (diversity - (inflammation / 2)).coerceIn(-100, 100)
 
         return GIEScorecard(
             gutHealthScore = overall,

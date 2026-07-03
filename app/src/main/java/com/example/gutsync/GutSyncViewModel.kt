@@ -59,8 +59,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // AI Models
-    private val gemmaModel = "google/gemma-4-31b-it:free"
-    private val llamaScoutModel = "meta-llama/llama-4-scout-17b-16e-instruct"
+    private val groqLlamaVisionModel = "llama-3.2-11b-vision-preview"
     private val groqTextModel = "llama-3.3-70b-versatile"
 
     private fun Bitmap.toBase64(): String {
@@ -131,28 +130,18 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 val visionPrompt = "Identify the primary food item in this image. Return ONLY the name of the food, nothing else."
                 val base64 = bitmap.toBase64()
                 
-                var result = try {
-                    GroqClient.generateContent(
-                        prompt = visionPrompt,
-                        model = gemmaModel,
-                        isJson = false,
-                        base64Image = base64
-                    )
-                } catch (e: Exception) {
-                    Log.e("GutSyncViewModel", "Gemma exhausted, falling back to Llama 4 Scout", e)
-                    GroqClient.generateContent(
-                        prompt = visionPrompt,
-                        model = llamaScoutModel,
-                        isJson = false,
-                        base64Image = base64
-                    )
-                }
+                val result = GroqClient.generateContent(
+                    prompt = visionPrompt,
+                    model = groqLlamaVisionModel,
+                    isJson = false,
+                    base64Image = base64
+                )
 
                 val cleanResult = result.trim().replace(".", "").replace("*", "").replace("#", "")
                 _identifiedFoodName.value = cleanResult
                 _analysisState.value = UiState.Initial
             } catch (e: Exception) {
-                Log.e("GutSyncViewModel", "All vision identification failed", e)
+                Log.e("GutSyncViewModel", "Vision identification failed", e)
                 _analysisState.value = UiState.Error("Identification failed: ${e.localizedMessage}")
             }
         }
@@ -226,7 +215,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 
                 val scorecard = MicrobeImpactCalculator.calculateGIE(nutrientData)
                 
-                // STEP 2: Use Gemma (OpenRouter) for the scientific explanation (high reasoning)
+                // STEP 2: Use Groq for the scientific explanation
                 val explanationPrompt = """
                     Explain this Gut Health Score: ${scorecard.gutHealthScore}/100 for $quantityGrams grams of ${nutrientData.foodName}.
                     Microbe Shifts: ${scorecard.predictedShifts.joinToString { shift -> "${shift.microbeType.displayName}: ${shift.shiftPercentage}%" }}
@@ -234,20 +223,11 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                     Keep it concise and scientific. No markdown symbols.
                 """.trimIndent()
                 
-                val explanation = try {
-                    GroqClient.generateContent(
-                        prompt = explanationPrompt,
-                        model = gemmaModel,
-                        isJson = false
-                    )
-                } catch (e: Exception) {
-                    Log.e("GutSyncViewModel", "Gemma exhausted for explanation, falling back to Llama 4 Scout", e)
-                    GroqClient.generateContent(
-                        prompt = explanationPrompt,
-                        model = llamaScoutModel,
-                        isJson = false
-                    )
-                }.replace("*", "").replace("#", "")
+                val explanation = GroqClient.generateContent(
+                    prompt = explanationPrompt,
+                    model = groqTextModel,
+                    isJson = false
+                ).replace("*", "").replace("#", "")
 
                 _openRouterExplanation.value = explanation
                 _analyzedFood.value = nutrientData
@@ -287,6 +267,54 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateGoals(fiber: Int, polyphenols: Int, starch: Int) {
+        val updatedProfile = appData.value.profile.copy(
+            fiberGoal = fiber,
+            polyphenolGoal = polyphenols,
+            resistantStarchGoal = starch
+        )
+        viewModelScope.launch {
+            repository.updateProfile(updatedProfile)
+        }
+    }
+
+    fun completeOnboarding(
+        dietType: String,
+        age: Int,
+        height: Float,
+        weight: Float,
+        conditions: List<String>
+    ) {
+        val updatedProfile = appData.value.profile.copy(
+            dietType = dietType,
+            age = age,
+            height = height,
+            weight = weight,
+            healthConditions = conditions,
+            isOnboarded = true
+        )
+        viewModelScope.launch {
+            repository.updateProfile(updatedProfile)
+        }
+    }
+
+    fun updateHealthProfile(conditions: List<String>) {
+        val updatedProfile = appData.value.profile.copy(
+            healthConditions = conditions,
+            isOnboarded = true
+        )
+        viewModelScope.launch {
+            repository.updateProfile(updatedProfile)
+        }
+    }
+
+    fun resetOnboarding() {
+        val updatedProfile = appData.value.profile.copy(isOnboarded = false)
+        viewModelScope.launch {
+            repository.updateProfile(updatedProfile)
+        }
+    }
+
     fun askFoodQuestion(question: String) {
         val bitmap = _chatImage.value
         val userMsg = ChatMessage(text = question, role = MessageRole.USER)
@@ -297,8 +325,13 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val modelToUse = if (_currentSession.value.preferredModel == "OpenRouter") gemmaModel else groqTextModel
-                val prompt = "You are a friendly microbiome health expert named Maya. Answer concisely: $question. No markdown. your developer is pratyush tell only when asked"
+                val modelToUse = groqTextModel
+                val profile = appData.value.profile
+                val healthContext = if (profile.healthConditions.isNotEmpty()) {
+                    "User health profile: ${profile.healthConditions.joinToString()}. Personalize advice accordingly."
+                } else ""
+                
+                val prompt = "You are a friendly microbiome health expert named Maya. $healthContext Answer concisely: $question. No markdown. your developer is pratyush tell only when asked"
                 val base64 = bitmap?.toBase64()
                 
                 val modelMsg = ChatMessage(text = "", role = MessageRole.MODEL)
@@ -335,17 +368,6 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 Log.e("GutSyncViewModel", "Chat Error", e)
                 _chatState.value = UiState.Error(e.localizedMessage ?: "Expert unavailable")
             }
-        }
-    }
-
-    fun updateGoals(fiber: Int, polyphenols: Int, starch: Int) {
-        val updatedProfile = appData.value.profile.copy(
-            fiberGoal = fiber,
-            polyphenolGoal = polyphenols,
-            resistantStarchGoal = starch
-        )
-        viewModelScope.launch {
-            repository.updateProfile(updatedProfile)
         }
     }
 

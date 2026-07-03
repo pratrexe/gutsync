@@ -186,7 +186,15 @@ fun MainNavigation(
     onSignOut: () -> Unit,
     viewModel: GutSyncViewModel
 ) {
+    val appData by viewModel.appData.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
+    
+    // Check if user needs onboarding
+    if (!appData.profile.isOnboarded) {
+        OnboardingScreen(viewModel = viewModel, onComplete = { /* Flow will update via appData */ })
+        return
+    }
+
     val tabs = listOf(
         NavigationItem("Home", Icons.Default.Home),
         NavigationItem("Log", Icons.Default.AddCircle),

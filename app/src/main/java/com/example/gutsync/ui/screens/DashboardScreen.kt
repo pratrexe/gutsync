@@ -57,23 +57,18 @@ fun DashboardScreen(
 
     val (healthScore, shifts) = remember(currentNutrients, meals) {
         val scorecard = MicrobeImpactCalculator.calculateGIE(currentNutrients)
-        // If we have no meals today, show a starting "resting" diversity rather than 0
+        // If we have no meals today, show 0
         val finalScore = if (currentNutrients.fiber == 0f && currentNutrients.polyphenols == 0f) {
-            42 // Baseline diversity when no food is logged yet today
+            0
         } else {
             scorecard.gutHealthScore
         }
         finalScore to scorecard.predictedShifts
     }
 
-    // Calculate REAL growth percentage (Immediate feedback: current score vs baseline)
+    // Calculate REAL growth percentage (Immediate feedback: current score vs previous)
     val growthPercentage = remember(healthScore) {
-        val baseline = 42.0
-        if (healthScore > baseline) {
-            (((healthScore - baseline) / baseline) * 100).toInt()
-        } else {
-            0
-        }
+        0 // Default to 0, compare logic can be more complex if needed
     }
 
     LazyColumn(
@@ -114,6 +109,7 @@ fun DashboardScreen(
         // Insight Card
         item {
             val insight = when {
+                healthScore < 0 -> "High Inflammation" to "Your gut is in a pro-inflammatory state. Avoid processed sugars and fats immediately."
                 healthScore < 50 -> "Pro-inflammatory" to "Your gut diversity is low. Focus on increasing prebiotic fiber and reducing refined sugars."
                 healthScore < 80 -> "Building Stability" to "Good progress! Your microbiome is stabilizing. Add more fermented foods to boost Lactobacillus."
                 else -> "Optimal Diversity" to "Excellent! Your dietary patterns are promoting a highly diverse and stable microbial environment."
@@ -129,14 +125,14 @@ fun DashboardScreen(
 fun MicrobeStatusGrid(shifts: List<MicrobeShift>) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            val bifido = (30 + (shifts.find { it.microbeType == MicrobeType.BIFIDOBACTERIUM }?.shiftPercentage?.toInt() ?: 0)).coerceIn(10, 100)
-            val lacto = (35 + (shifts.find { it.microbeType == MicrobeType.LACTOBACILLUS }?.shiftPercentage?.toInt() ?: 0)).coerceIn(10, 100)
+            val bifido = (shifts.find { it.microbeType == MicrobeType.BIFIDOBACTERIUM }?.shiftPercentage?.toInt() ?: 0).coerceIn(0, 100)
+            val lacto = (shifts.find { it.microbeType == MicrobeType.LACTOBACILLUS }?.shiftPercentage?.toInt() ?: 0).coerceIn(0, 100)
             MicrobeStatusCard(MicrobeType.BIFIDOBACTERIUM, bifido, getStatusText(bifido), Modifier.weight(1f))
             MicrobeStatusCard(MicrobeType.LACTOBACILLUS, lacto, getStatusText(lacto), Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            val akker = (25 + (shifts.find { it.microbeType == MicrobeType.AKKERMANSIA }?.shiftPercentage?.toInt() ?: 0)).coerceIn(10, 100)
-            val bacter = (40 + (shifts.find { it.microbeType == MicrobeType.BACTEROIDES }?.shiftPercentage?.toInt() ?: 0)).coerceIn(10, 100)
+            val akker = (shifts.find { it.microbeType == MicrobeType.AKKERMANSIA }?.shiftPercentage?.toInt() ?: 0).coerceIn(0, 100)
+            val bacter = (shifts.find { it.microbeType == MicrobeType.BACTEROIDES }?.shiftPercentage?.toInt() ?: 0).coerceIn(0, 100)
             MicrobeStatusCard(MicrobeType.AKKERMANSIA, akker, getStatusText(akker), Modifier.weight(1f))
             MicrobeStatusCard(MicrobeType.BACTEROIDES, bacter, getStatusText(bacter), Modifier.weight(1f))
         }
@@ -174,6 +170,9 @@ fun MiniGoalCard(label: String, current: Int, goal: Int) {
 
 @Composable
 fun ScoreHeroSection(score: Int, growth: Int) {
+    val isNegative = score < 0
+    val ringColor = if (isNegative) Color.Red else Color.White
+    
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.padding(vertical = 48.dp)
@@ -185,9 +184,9 @@ fun ScoreHeroSection(score: Int, growth: Int) {
                     style = Stroke(width = 4.dp.toPx())
                 )
                 drawArc(
-                    color = Color.White,
+                    color = ringColor,
                     startAngle = -90f,
-                    sweepAngle = (score / 100f) * 360f,
+                    sweepAngle = (kotlin.math.abs(score) / 100f) * 360f,
                     useCenter = false,
                     style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
                 )
@@ -197,7 +196,7 @@ fun ScoreHeroSection(score: Int, growth: Int) {
                     text = score.toString(),
                     fontSize = 48.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = ringColor
                 )
                 Text(
                     text = "HEALTH SCORE",

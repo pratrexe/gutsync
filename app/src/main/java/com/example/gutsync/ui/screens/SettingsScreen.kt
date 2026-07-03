@@ -185,6 +185,48 @@ fun SettingsScreen(
             }
         }
 
+        // Health Profile Card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "HEALTH PROFILE",
+                        fontSize = 12.sp,
+                        letterSpacing = 1.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    if (profile.healthConditions.isEmpty()) {
+                        Text("No conditions specified.", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
+                    } else {
+                        Text(
+                            text = profile.healthConditions.joinToString(", "),
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            viewModel.resetOnboarding()
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f), contentColor = Color.White),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Update Profile", fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+
         // Account Status Card
         item {
             Card(
