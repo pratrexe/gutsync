@@ -84,6 +84,9 @@ object GroqClient {
             else -> GROQ_URL to GROQ_API_KEY
         }
 
+        // Only enable streaming for non-OpenRouter models
+        val useStreaming = !isOpenRouterModel(model)
+
         val contentArray = JSONArray().apply {
             put(JSONObject().apply {
                 put("type", "text")
@@ -101,7 +104,7 @@ object GroqClient {
 
         val json = JSONObject().apply {
             put("model", model.removePrefix("nvidia/"))
-            put("stream", true) // Enable streaming
+            if (useStreaming) put("stream", true)
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "user")
@@ -142,8 +145,11 @@ object GroqClient {
             .url(url)
             .addHeader("Authorization", "Bearer $key")
             .addHeader("Content-Type", "application/json")
-            .addHeader("Accept", "text/event-stream") // Accept SSE
             .post(body)
+
+        if (useStreaming) {
+            requestBuilder.addHeader("Accept", "text/event-stream")
+        }
 
         if (url == OPENROUTER_URL) {
             requestBuilder.addHeader("HTTP-Referer", "https://gutsync.app")
@@ -156,25 +162,35 @@ object GroqClient {
             throw Exception("API Error ${response.code}: $errorBody")
         }
 
-        val reader = response.body?.source()?.inputStream()?.bufferedReader()
-        reader?.use { r ->
-            var line: String?
-            while (r.readLine().also { line = it } != null) {
-                if (line?.startsWith("data: ") == true) {
-                    val data = line?.substringAfter("data: ")?.trim()
-                    if (data == "[DONE]") break
-                    
-                    try {
-                        val jsonResp = JSONObject(data ?: "")
-                        val content = jsonResp.getJSONArray("choices")
-                            .getJSONObject(0)
-                            .getJSONObject("delta")
-                            .optString("content", "")
-                        if (content.isNotEmpty()) {
-                            emit(content)
+        if (!useStreaming) {
+            val responseBody = response.body?.string()
+            val content = JSONObject(responseBody ?: "")
+                .getJSONArray("choices")
+                .getJSONObject(0)
+                .getJSONObject("message")
+                .getString("content")
+            emit(content)
+        } else {
+            val reader = response.body?.source()?.inputStream()?.bufferedReader()
+            reader?.use { r ->
+                var line: String?
+                while (r.readLine().also { line = it } != null) {
+                    if (line?.startsWith("data: ") == true) {
+                        val data = line?.substringAfter("data: ")?.trim()
+                        if (data == "[DONE]") break
+                        
+                        try {
+                            val jsonResp = JSONObject(data ?: "")
+                            val content = jsonResp.getJSONArray("choices")
+                                .getJSONObject(0)
+                                .getJSONObject("delta")
+                                .optString("content", "")
+                            if (content.isNotEmpty()) {
+                                emit(content)
+                            }
+                        } catch (e: Exception) {
+                            // Skip malformed chunks
                         }
-                    } catch (e: Exception) {
-                        // Skip malformed chunks
                     }
                 }
             }
