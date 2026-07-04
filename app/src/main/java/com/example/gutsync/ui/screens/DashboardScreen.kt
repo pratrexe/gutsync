@@ -41,6 +41,8 @@ import com.example.gutsync.data.MicrobeShift
 import com.example.gutsync.ui.theme.SurfaceContainerHighest
 import com.example.gutsync.ui.theme.SurfaceContainerLowest
 
+import com.example.gutsync.ui.theme.TranscityFont
+
 @Composable
 fun DashboardScreen(
     viewModel: GutSyncViewModel = viewModel()
@@ -245,6 +247,7 @@ fun MetricCard(
                             text = label,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
+                            fontFamily = TranscityFont,
                             color = Color.White.copy(alpha = 0.7f)
                         )
                     }
@@ -305,6 +308,7 @@ fun MetricCard(
                         text = label,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
+                        fontFamily = TranscityFont,
                         color = Color.White.copy(alpha = 0.7f)
                     )
                 }
@@ -407,6 +411,7 @@ fun ScoreHeroSection(score: Int) {
             text = "Gut Health",
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
+            fontFamily = TranscityFont,
             color = Color.White.copy(alpha = 0.6f),
             modifier = Modifier.padding(bottom = 4.dp)
         )
