@@ -6,31 +6,36 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.gutsync.GutSyncViewModel
+import com.example.gutsync.ui.theme.TranscityFont
 import java.util.*
 
 @Composable
@@ -42,155 +47,311 @@ fun StreakSheetContent(
     val appData by viewModel.appData.collectAsState()
     val profile = appData.profile
 
-    Box(
-        modifier = modifier.fillMaxSize()
-    ) {
-        Column(
+    Box(modifier = modifier.fillMaxSize()) {
+
+        // Same LiquidBackground as home
+        LiquidBackground()
+
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(horizontal = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
+            item { Spacer(modifier = Modifier.height(56.dp)) }
 
-            // Fire Icon & Streak Number
-            Box(contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .size(120.dp)
-                        .blur(40.dp)
-                        .background(Color(0xFFFF5722).copy(alpha = 0.2f), CircleShape)
-                )
+            // ── Streak number ──────────────────────────────
+            item {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.LocalFireDepartment,
-                        contentDescription = null,
-                        tint = Color(0xFFFF5722),
-                        modifier = Modifier.size(60.dp)
-                    )
                     Text(
                         text = profile.streakCount.toString(),
-                        fontSize = 40.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        fontSize = 96.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = (-4).sp,
+                        lineHeight = 96.sp
+                    )
+
+                    Text(
+                        text = "day streak",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.4f),
+                        letterSpacing = 1.sp
                     )
                 }
+
+                Spacer(modifier = Modifier.height(48.dp))
+
+                // ── Thin divider ──────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color.White.copy(alpha = 0.08f))
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
             }
 
-            Text(
-                text = "Daily Streaks",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier.padding(top = 16.dp)
-            )
+            // ── Weekly grid label ─────────────────────────
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "This week",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White.copy(alpha = 0.6f),
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = "Freeze: ${profile.streakFreezes}",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.3f)
+                    )
+                }
 
-            Text(
-                text = "You're doing really great!",
-                fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.6f),
-                modifier = Modifier.padding(top = 4.dp)
-            )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Weekly View
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            // ── Weekly circles ────────────────────────────
+            item {
                 val days = listOf("M", "T", "W", "T", "F", "S", "S")
                 val calendar = Calendar.getInstance()
                 val currentDayIdx = (calendar.get(Calendar.DAY_OF_WEEK) + 5) % 7
 
-                days.forEachIndexed { index, day ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = day,
-                            fontSize = 10.sp,
-                            color = if (index == currentDayIdx) Color.White else Color.White.copy(alpha = 0.4f),
-                            fontWeight = if (index == currentDayIdx) FontWeight.Bold else FontWeight.Normal
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    days.forEachIndexed { index, day ->
                         val isChecked = profile.weeklyCheckIns.getOrNull(index) ?: false
+                        val isCurrent = index == currentDayIdx
                         val isPast = index < currentDayIdx
 
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = day,
+                                fontSize = 10.sp,
+                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.25f)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when {
+                                            isChecked -> Color.White
+                                            isCurrent -> Color.White.copy(alpha = 0.08f)
+                                            else -> Color.White.copy(alpha = 0.04f)
+                                        }
+                                    )
+                                    .border(
+                                        width = if (isCurrent && !isChecked) 1.dp else 0.dp,
+                                        color = Color.White.copy(alpha = 0.25f),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                when {
+                                    isChecked -> Icon(
+                                        Icons.Default.LocalFireDepartment,
+                                        null,
+                                        tint = Color.Black,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+
+                                    isPast -> Icon(
+                                        Icons.Default.Close,
+                                        null,
+                                        tint = Color.White.copy(alpha = 0.2f),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // ── Thin divider ──────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color.White.copy(alpha = 0.08f))
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+
+            // ── Streak freeze bar ─────────────────────────
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = 0.04f))
+                        .border(
+                            1.dp,
+                            Brush.verticalGradient(
+                                listOf(Color.White.copy(alpha = 0.12f), Color.Transparent)
+                            ),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .padding(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Streak Freezes",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = "${profile.streakFreezes} / 2",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.1f))
+                    ) {
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .fillMaxWidth(profile.streakFreezes / 2f)
+                                .fillMaxHeight()
                                 .clip(CircleShape)
-                                .background(
-                                    if (isChecked) Color(0xFFFF5722).copy(alpha = 0.2f)
-                                    else Color.White.copy(alpha = 0.05f)
-                                )
-                                .border(
-                                    1.dp,
-                                    if (index == currentDayIdx) Color.White.copy(alpha = 0.3f) else Color.Transparent,
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
+                                .background(Color.White)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Log a meal to protect your streak",
+                        fontSize = 11.sp,
+                        color = Color.White.copy(alpha = 0.25f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(40.dp))
+            }
+
+            // ── Achievements Section ──────────────────────
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "Achievements",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = TranscityFont,
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.Start)
+                    )
+
+                    val achievements = listOf(
+                        AchievementData(10, "Novice", "10 Day Streak"),
+                        AchievementData(20, "Apprentice", "20 Day Streak"),
+                        AchievementData(50, "Warrior", "50 Day Streak"),
+                        AchievementData(100, "Master", "100 Day Streak"),
+                        AchievementData(200, "Legend", "200 Day Streak"),
+                        AchievementData(500, "Godlike", "500 Day Streak")
+                    )
+
+                    achievements.chunked(2).forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            if (isChecked) {
-                                Icon(
-                                    Icons.Default.LocalFireDepartment,
-                                    null,
-                                    tint = Color(0xFFFF5722),
-                                    modifier = Modifier.size(18.dp)
+                            rowItems.forEach { achievement ->
+                                AchievementCard(
+                                    data = achievement,
+                                    isUnlocked = profile.streakCount >= achievement.threshold,
+                                    modifier = Modifier.weight(1f)
                                 )
-                            } else if (isPast) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    null,
-                                    tint = Color.Red.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(16.dp)
-                                )
+                            }
+                            if (rowItems.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            item { Spacer(modifier = Modifier.height(120.dp)) }
+        }
+    }
+}
 
-            // Streak Freeze Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
-                shape = RoundedCornerShape(20.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "❄️ Streak Freezes",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "${profile.streakFreezes} available this week",
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    LinearProgressIndicator(
-                        progress = { profile.streakFreezes / 2f },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(CircleShape),
-                        color = Color(0xFF03A9F4),
-                        trackColor = Color.White.copy(alpha = 0.1f)
-                    )
-                }
+data class AchievementData(val threshold: Int, val title: String, val subtitle: String)
+
+@Composable
+fun AchievementCard(data: AchievementData, isUnlocked: Boolean, modifier: Modifier = Modifier) {
+    val alpha = if (isUnlocked) 1f else 0.2f
+    val iconColor = if (isUnlocked) Color(0xFFFFD700) else Color.Gray
+    
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (isUnlocked) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.02f)
+        ),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, if (isUnlocked) Color.White.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f)),
+        modifier = modifier.height(140.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (isUnlocked) Icons.Default.EmojiEvents else Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(40.dp).alpha(alpha)
+                )
             }
-
-            Spacer(modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = data.title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White.copy(alpha = if (isUnlocked) 1f else 0.4f),
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = data.subtitle,
+                fontSize = 11.sp,
+                color = Color.White.copy(alpha = if (isUnlocked) 0.6f else 0.2f),
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -249,57 +410,6 @@ fun StreakSheet(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun StreakAnimatedBackground(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "streak_bg")
-
-    val xOffset by infiniteTransition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(8000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ), label = "x"
-    )
-
-    val yOffset by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 0.2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(10000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ), label = "y"
-    )
-
-    Canvas(modifier = modifier) {
-        val width = size.width
-        val height = size.height
-
-        // Transparent background to let the pill's background show through
-        drawRect(color = Color.Black.copy(alpha = 0.1f))
-
-        val brush = Brush.radialGradient(
-            colors = listOf(
-                Color(0xFFFF5722).copy(alpha = 0.2f),
-                Color.Transparent
-            ),
-            center = Offset(width * xOffset, height * yOffset),
-            radius = width * 0.9f
-        )
-        drawRect(brush = brush)
-
-        val brush2 = Brush.radialGradient(
-            colors = listOf(
-                Color(0xFFE91E63).copy(alpha = 0.15f),
-                Color.Transparent
-            ),
-            center = Offset(width * (1f - xOffset), height * (1f - yOffset)),
-            radius = width * 0.7f
-        )
-        drawRect(brush = brush2)
     }
 }
 

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.Opacity
+import androidx.compose.ui.layout.ContentScale
 import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.data.MicrobeType
 import com.example.gutsync.data.MicrobeImpactCalculator
@@ -40,11 +41,17 @@ import com.example.gutsync.data.NutrientData
 import com.example.gutsync.data.MicrobeShift
 import com.example.gutsync.ui.theme.SurfaceContainerHighest
 import com.example.gutsync.ui.theme.SurfaceContainerLowest
-
 import com.example.gutsync.ui.theme.TranscityFont
+
+import com.example.gutsync.data.auth.AuthSession
+
+import androidx.compose.foundation.Image
+import androidx.compose.material.icons.filled.Person
+import coil3.compose.rememberAsyncImagePainter
 
 @Composable
 fun DashboardScreen(
+    session: AuthSession,
     viewModel: GutSyncViewModel = viewModel()
 ) {
     val appData by viewModel.appData.collectAsState()
@@ -73,7 +80,8 @@ fun DashboardScreen(
 
     val (healthScore, shifts) = remember(currentNutrients, meals) {
         val scorecard = MicrobeImpactCalculator.calculateGIE(currentNutrients)
-        val finalScore = if (currentNutrients.fiber == 0f && currentNutrients.polyphenols == 0f) 0 else scorecard.gutHealthScore
+        val hasData = currentNutrients.fiber > 0 || currentNutrients.polyphenols > 0 || currentNutrients.sugar > 0 || currentNutrients.saturatedFats > 0
+        val finalScore = if (!hasData) 0 else scorecard.gutHealthScore
         finalScore to scorecard.predictedShifts
     }
 
@@ -81,10 +89,77 @@ fun DashboardScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        item { Spacer(modifier = Modifier.height(16.dp)) }
+        item {
+            val calendar = java.util.Calendar.getInstance()
+            val hour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+            val greeting = when (hour) {
+                in 0..11 -> "Good morning"
+                in 12..16 -> "Good afternoon"
+                else -> "Good evening"
+            }
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.Black)
+                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)), CircleShape)
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "$greeting, ",
+                        fontSize = 18.sp,
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.Normal
+                    )
+                    Text(
+                        text = session.displayName ?: "User",
+                        fontSize = 22.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = TranscityFont,
+                        modifier = Modifier.offset(y = 2.dp)
+                    )
+                }
+
+                // Profile Picture (Outside the pill, on the right)
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .align(Alignment.CenterEnd)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (session.photoUrl != null) {
+                        Image(
+                            painter = rememberAsyncImagePainter(session.photoUrl),
+                            contentDescription = "Profile",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Profile",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+        }
 
         item {
             ScoreHeroSection(score = healthScore)
@@ -341,7 +416,7 @@ fun MicrobeStatusGrid(shifts: List<MicrobeShift>) {
             val lacto = shifts.find { it.microbeType == MicrobeType.LACTOBACILLUS }?.shiftPercentage?.toInt() ?: 0
             
             MetricCard(
-                icon = Icons.Default.Eco, // Placeholder, usually these need specific icons
+                icon = Icons.Default.Eco, 
                 value = "$bifido%",
                 unit = "",
                 label = "Bifidobacterium",
@@ -401,6 +476,77 @@ fun ScoreHeroSection(score: Int) {
     val animatedScore by animateIntAsState(targetValue = score, animationSpec = tween(1500), label = "score")
     val animatedProgress by animateFloatAsState(targetValue = progress, animationSpec = tween(1500), label = "progress")
 
+    // Random daily phrase based on score
+    val healthPhrase = remember(score) {
+        val calendar = java.util.Calendar.getInstance()
+        val seed = calendar.get(java.util.Calendar.YEAR) * 1000 + calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        val random = java.util.Random(seed.toLong())
+
+        val phrases = when {
+            score <= 20 -> listOf(
+                "Are ya even trying?",
+                "Your body has filed a complaint.",
+                "This ain't it, chief.",
+                "Your organs want a meeting.",
+                "Error 404: Healthy habits not found.",
+                "Bro is running on vibes.",
+                "We need to talk.",
+                "Certified gremlin behavior.",
+                "Your future self is disappointed.",
+                "The stats are... concerning."
+            )
+            score <= 40 -> listOf(
+                "Could be worse. Somehow.",
+                "Not exactly a flex.",
+                "One salad won't fix this.",
+                "We're surviving, not thriving.",
+                "Time to lock in.",
+                "This is your sign.",
+                "Your body deserves better.",
+                "Progress starts today.",
+                "Room for... lots of improvement.",
+                "We can cook. Just not literally."
+            )
+            score <= 60 -> listOf(
+                "Meh. Perfectly average.",
+                "You're getting somewhere.",
+                "Not bad. Not great.",
+                "NPC health stats.",
+                "The tutorial isn't over.",
+                "Decent... ish.",
+                "Could use a little upgrade.",
+                "Halfway to greatness.",
+                "Mid, but fixable.",
+                "You're on the right loading screen."
+            )
+            score <= 80 -> listOf(
+                "Look who's making progress.",
+                "Your body approves.",
+                "Keep cooking.",
+                "That's more like it.",
+                "You're doing better than yesterday.",
+                "W streak.",
+                "Keep the momentum.",
+                "Almost elite.",
+                "Looking healthier already.",
+                "Your future self says thanks."
+            )
+            else -> listOf(
+                "Main character energy.",
+                "Built different.",
+                "Peak performance unlocked.",
+                "Health called. You're hired.",
+                "This is what consistency looks like.",
+                "Absolute W.",
+                "Keep flexing.",
+                "You're carrying the leaderboard.",
+                "Doctor-approved vibes.",
+                "Achievement unlocked: Healthy Human."
+            )
+        }
+        phrases[random.nextInt(phrases.size)]
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -409,7 +555,7 @@ fun ScoreHeroSection(score: Int) {
         // Gut Health Label
         Text(
             text = "Gut Health",
-            fontSize = 14.sp,
+            fontSize = 30.sp,
             fontWeight = FontWeight.Medium,
             fontFamily = TranscityFont,
             color = Color.White.copy(alpha = 0.6f),
@@ -421,19 +567,19 @@ fun ScoreHeroSection(score: Int) {
             verticalAlignment = Alignment.Bottom,
             modifier = Modifier.padding(bottom = 24.dp)
         ) {
+            val scoreColor = if (score >= 80) Color(0xFF52D385) else if (score >= 40) Color(0xFFFFC107) else Color(0xFFFF5252)
             Text(
                 text = animatedScore.toString(),
                 fontSize = 56.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White,
-                lineHeight = 56.sp
+                fontWeight = FontWeight.Light,
+                color = scoreColor
             )
             Text(
                 text = " /100",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Normal,
                 color = Color.White.copy(alpha = 0.4f),
-                modifier = Modifier.padding(bottom = 6.dp, start = 4.dp)
+                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
             )
         }
 
@@ -441,27 +587,25 @@ fun ScoreHeroSection(score: Int) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(210.dp) // Adjusted from 220.dp to shift gauge up
-                .offset(y = (-60).dp), // Moves the gauge 10px up
+                .height(210.dp) 
+                .offset(y = (-60).dp),
             contentAlignment = Alignment.TopCenter
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val strokeWidth = 28.dp.toPx()
-                // Ensure sufficient padding so shadows and the line don't clip
                 val padding = strokeWidth / 2 + 16.dp.toPx()
                 val arcDiameter = size.width - (padding * 2)
-
+                
                 val topLeftOffset = Offset(padding, padding)
                 val arcSize = Size(arcDiameter, arcDiameter)
                 val radius = arcDiameter / 2
                 val center = Offset(padding + radius, padding + radius)
 
-                // Define arc constraints (sweeping 240 degrees over the top)
                 val startAngle = 150f
                 val sweepAngle = 240f
                 val currentAngle = startAngle + (sweepAngle * animatedProgress)
 
-                val dotColor = Color(0xFF52D385)
+                val dotColor = if (score >= 80) Color(0xFF52D385) else if (score >= 40) Color(0xFFFFC107) else Color(0xFFFF5252)
                 val trackBaseColor = Color(0xFF2A2A2A)
                 val trackStripeColor = Color(0xFF1A1A1A)
 
@@ -475,15 +619,15 @@ fun ScoreHeroSection(score: Int) {
                     topLeft = topLeftOffset,
                     size = arcSize
                 )
-
-                // 2. Draw Subtle Ridges Overlay (simulating the hatched pattern)
+                
+                // 2. Draw Subtle Ridges Overlay
                 drawArc(
                     color = trackStripeColor,
                     startAngle = startAngle,
                     sweepAngle = sweepAngle,
                     useCenter = false,
                     style = Stroke(
-                        width = strokeWidth,
+                        width = strokeWidth, 
                         cap = StrokeCap.Butt,
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))
                     ),
@@ -491,7 +635,7 @@ fun ScoreHeroSection(score: Int) {
                     size = arcSize
                 )
 
-                // 3. Draw Green Progress Arc
+                // 3. Draw Progress Arc
                 drawArc(
                     color = dotColor,
                     startAngle = startAngle,
@@ -511,7 +655,7 @@ fun ScoreHeroSection(score: Int) {
                 val thumbX = center.x + radius * Math.cos(currentAngleRad).toFloat()
                 val thumbY = center.y + radius * Math.sin(currentAngleRad).toFloat()
 
-                // 5. Left Cap (Starting point)
+                // 5. Left Cap
                 drawCircle(
                     color = Color(0xFF303030),
                     radius = strokeWidth / 2,
@@ -524,7 +668,6 @@ fun ScoreHeroSection(score: Int) {
                 )
 
                 // 6. Right Cap (Glowing Thumb)
-                // Simulated Box Shadow Gradient
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent),
@@ -534,13 +677,11 @@ fun ScoreHeroSection(score: Int) {
                     center = Offset(thumbX, thumbY + 8f),
                     radius = strokeWidth
                 )
-                // Outer Green Thumb
                 drawCircle(
                     color = dotColor,
                     radius = strokeWidth / 2,
                     center = Offset(thumbX, thumbY)
                 )
-                // Inner White Dot
                 drawCircle(
                     color = Color.White,
                     radius = strokeWidth / 4.5f,
@@ -559,10 +700,10 @@ fun ScoreHeroSection(score: Int) {
                     strokeWidth = 1.5.dp.toPx()
                 )
             }
-
-            // Subtitle
+            
+            // Daily Phrase
             Text(
-                text = "Stability improved by +4%",
+                text = healthPhrase,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
                 color = Color.White.copy(alpha = 0.6f),

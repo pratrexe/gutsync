@@ -240,7 +240,10 @@ fun MainNavigation(
                 color = Color.Transparent
             ) {
                 when (selectedTab) {
-                    0 -> DashboardScreen(viewModel = viewModel)
+                    0 -> DashboardScreen(
+                        session = session,
+                        viewModel = viewModel
+                    )
                     1 -> MealLoggerScreen(viewModel = viewModel)
                     2 -> TrendsScreen(viewModel = viewModel)
                     3 -> AskCooperScreen(viewModel = viewModel)
