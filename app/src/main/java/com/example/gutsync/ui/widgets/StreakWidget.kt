@@ -10,6 +10,7 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -36,32 +37,40 @@ class StreakWidget : GlanceAppWidget() {
                     modifier = GlanceModifier
                         .fillMaxSize()
                         .background(Color(0xFF0A0A0A))
-                        .padding(12.dp),
+                        .padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Box(
+                        modifier = GlanceModifier
+                            .fillMaxSize()
+                            .background(Color(0xFF1C1C1E))
+                            .cornerRadius(24.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "🔥",
-                            style = TextStyle(fontSize = 32.sp)
-                        )
-                        Text(
-                            text = streak.toString(),
-                            style = TextStyle(
-                                color = ColorProvider(Color.White),
-                                fontSize = 36.sp,
-                                fontWeight = FontWeight.Bold
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "🔥",
+                                style = TextStyle(fontSize = 32.sp)
                             )
-                        )
-                        Text(
-                            text = "STREAK",
-                            style = TextStyle(
-                                color = ColorProvider(Color(0xFFA1A1AA)),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
+                            Text(
+                                text = streak.toString(),
+                                style = TextStyle(
+                                    color = ColorProvider(Color.White),
+                                    fontSize = 36.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             )
-                        )
+                            Text(
+                                text = "STREAK",
+                                style = TextStyle(
+                                    color = ColorProvider(Color(0xFFA1A1AA)),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            )
+                        }
                     }
                 }
             }
