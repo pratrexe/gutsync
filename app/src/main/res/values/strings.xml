@@ -8,4 +8,6 @@
     <string name="image2_description">Cookies</string>
     <string name="image3_description">Cake</string>
     <string name="results_placeholder">(Results will appear here)</string>
+    <string name="streak_widget_desc">View your current GutSync streak</string>
+    <string name="action_widget_desc">Quick log food and see recent activity</string>
 </resources>

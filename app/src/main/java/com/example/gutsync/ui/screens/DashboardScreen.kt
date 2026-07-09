@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.ui.layout.ContentScale
-
 import com.example.gutsync.GutSyncViewModel
 import com.example.gutsync.data.MicrobeType
 import com.example.gutsync.data.MicrobeImpactCalculator

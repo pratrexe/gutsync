@@ -57,6 +57,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         sessionManager = SessionManager(this)
 
+        val widgetAction = intent.getStringExtra("action")
+
         setContent {
             val viewModel: GutSyncViewModel = viewModel()
             var currentSession by remember { mutableStateOf(sessionManager.getSession()) }
@@ -141,7 +143,8 @@ class MainActivity : ComponentActivity() {
                                 currentSession = AuthSession()
                                 viewModel.signOut()
                             },
-                            viewModel = viewModel
+                            viewModel = viewModel,
+                            initialAction = widgetAction
                         )
                     } else {
                         LoginScreen(
@@ -176,10 +179,18 @@ fun MainNavigation(
     session: AuthSession,
     onConnectDrive: () -> Unit,
     onSignOut: () -> Unit,
-    viewModel: GutSyncViewModel
+    viewModel: GutSyncViewModel,
+    initialAction: String? = null
 ) {
     val appData by viewModel.appData.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
+    
+    // Handle intent from widgets
+    LaunchedEffect(initialAction) {
+        when (initialAction) {
+            "SCAN_QR", "SCAN_FOOD" -> selectedTab = 1
+        }
+    }
     
     // Check if user needs onboarding
     if (!appData.profile.isOnboarded) {
