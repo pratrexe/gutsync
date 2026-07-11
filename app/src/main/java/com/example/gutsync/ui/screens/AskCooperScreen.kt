@@ -102,6 +102,14 @@ fun AskCooperScreen(viewModel: GutSyncViewModel = viewModel()) {
         }
     }
 
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            cameraLauncher.launch(photoUri)
+        }
+    }
+
     // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(currentSession.messages.size) {
         if (currentSession.messages.isNotEmpty()) {
@@ -150,7 +158,7 @@ fun AskCooperScreen(viewModel: GutSyncViewModel = viewModel()) {
                     if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                         cameraLauncher.launch(photoUri)
                     } else {
-                        // Request permission or show dialog
+                        permissionLauncher.launch(android.Manifest.permission.CAMERA)
                     }
                 },
                 onRemoveImage = { viewModel.setChatImage(null) },

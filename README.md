@@ -20,13 +20,13 @@ Analysis is executed through a rigorous multi-stage heuristic pipeline:
     - *Bifidobacterium* and *Lactobacillus* (Fiber/Resistant Starch-dependent SCFA producers).
     - *Akkermansia muciniphila* (Polyphenol-mediated mucin-degrading specialists).
     - *Bacteroides* (Taxa sensitive to ultra-processed emulsifiers and refined saccharides).
-- **Phase IV: Scientific Synthesis**: The system utilizes the Llama-3.3-70B architecture (via Groq) and Llama-3.2-11B-Vision-Preview for the generation of technical explanations, providing users with evidence-based scientific reasoning for calculated scores.
+- **Phase IV: Scientific Synthesis**: The system utilizes the **Gemma 4-31B** architecture (via OpenRouter) as the primary analytical engine, with an automated fallback mechanism to **Llama 4 Scout** (via Groq) to ensure uninterrupted service availability and high-fidelity scientific reasoning.
 
 ### 4. User Interface and Interactive Experience
 The presentation layer is constructed using the Jetpack Compose declarative framework, adhering to a high-contrast monochromatic aesthetic:
 - **Reactive State Management**: Utilizing `StateFlow` and `ViewModel` architectures to ensure that the user interface remains a perfect reflection of the underlying domain state.
 - **Micro-Interaction System**: The "Dynamic Island" navigation paradigm facilitates fluid transitions between functional domains while maintaining optimal ergonomic accessibility.
-- **Maya: The Microbiome Expert**: An integrated conversational interface capable of processing multi-modal inputs (text and image) to provide real-time expertise on microbiome modulation.
+- **Maya: The Microbiome Expert**: An integrated conversational interface capable of processing multi-modal inputs (text and image) to provide real-time expertise on microbiome modulation. Users can dynamically switch between frontier models to optimize for reasoning depth or inference velocity.
 
 ## Comprehensive Project Hierarchy
 
@@ -39,12 +39,13 @@ The codebase is organized into highly specialized modules to ensure architectura
         - `auth`: Encapsulates authentication protocols, including `GoogleAuthHelper` for cloud federation and `SessionManager` for secure token/state persistence.
         - `storage`: Manages data access objects and repository patterns, including `GutSyncRepository` and `DriveServiceHelper`.
         - `OFFClient.kt`: A specialized interface for communicating with the Open Food Facts nutritional repository.
-        - `GroqClient.kt`: A high-performance abstraction layer for executing streaming inference requests against remote LLM endpoints.
+        - `GroqClient.kt`: A high-performance abstraction layer for executing streaming inference requests with **recursive automated fallback logic** targeting the Llama 4 Scout architecture.
         - `MicrobeImpact.kt`: Contains the core domain logic for GIE calculations and taxonomic shift prediction models.
     - `ui`:
         - `screens`: Contains specialized view implementations such as `DashboardScreen` (data visualization), `MealLoggerScreen` (input orchestration), and `TrendsScreen` (longitudinal analysis).
         - `theme`: Defines a rigorous design system utilizing Material 3 tokens, prioritizing high-fidelity typography and a low-luminance palette.
         - `components`: Reusable UI primitives and complex animations, including liquid-physics backgrounds and custom progress indicators.
+        - `widgets`: Home screen widget providers for real-time streak monitoring and accelerated logging.
 
 ## Operational Prerequisites
 

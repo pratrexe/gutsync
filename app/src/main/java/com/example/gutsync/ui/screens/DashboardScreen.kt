@@ -1,16 +1,23 @@
 package com.example.gutsync.ui.screens
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Eco
+import androidx.compose.material.icons.filled.Grain
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Opacity
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,30 +31,19 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Eco
-import androidx.compose.material.icons.filled.Grain
-import androidx.compose.material.icons.filled.Opacity
-import androidx.compose.ui.layout.ContentScale
-import com.example.gutsync.GutSyncViewModel
-import com.example.gutsync.data.MicrobeType
-import com.example.gutsync.data.MicrobeImpactCalculator
-import com.example.gutsync.data.NutrientData
-import com.example.gutsync.data.MicrobeShift
-import com.example.gutsync.ui.theme.SurfaceContainerHighest
-import com.example.gutsync.ui.theme.SurfaceContainerLowest
-import com.example.gutsync.ui.theme.TranscityFont
-
-import com.example.gutsync.data.auth.AuthSession
-
-import androidx.compose.foundation.Image
-import androidx.compose.material.icons.filled.Person
 import coil3.compose.rememberAsyncImagePainter
+import com.example.gutsync.GutSyncViewModel
+import com.example.gutsync.data.MicrobeImpactCalculator
+import com.example.gutsync.data.MicrobeShift
+import com.example.gutsync.data.NutrientData
+import com.example.gutsync.data.auth.AuthSession
+import com.example.gutsync.ui.theme.TranscityFont
 
 @Composable
 fun DashboardScreen(
@@ -83,6 +79,34 @@ fun DashboardScreen(
         val hasData = currentNutrients.fiber > 0 || currentNutrients.polyphenols > 0 || currentNutrients.sugar > 0 || currentNutrients.saturatedFats > 0
         val finalScore = if (!hasData) 0 else scorecard.gutHealthScore
         finalScore to scorecard.predictedShifts
+    }
+
+    // Process 7-day Trend Data
+    val weeklyTrend = remember(meals) {
+        (0 until 7).map { daysAgo ->
+            val dayCalendar = java.util.Calendar.getInstance().apply {
+                add(java.util.Calendar.DAY_OF_YEAR, -daysAgo)
+                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }
+            val nextDayCalendar = (dayCalendar.clone() as java.util.Calendar).apply {
+                add(java.util.Calendar.DAY_OF_YEAR, 1)
+            }
+            
+            val daysMeals = meals.filter { 
+                it.timestamp >= dayCalendar.timeInMillis && it.timestamp < nextDayCalendar.timeInMillis 
+            }
+            
+            val totalFiber = daysMeals.sumOf { it.nutrients.fiber.toDouble() }.toFloat()
+            val totalPolyphenols = daysMeals.sumOf { it.nutrients.polyphenols.toDouble() }.toFloat()
+            val totalStarch = daysMeals.sumOf { it.nutrients.resistantStarch.toDouble() }.toFloat()
+            
+            // Simplified Score (0-1) based on goals
+            val score = ((totalFiber / 30f) + (totalPolyphenols / 500f) + (totalStarch / 15f)) / 3f
+            score.coerceIn(0.1f, 1f)
+        }.reversed()
     }
 
     LazyColumn(
@@ -166,6 +190,10 @@ fun DashboardScreen(
         }
 
         item {
+            WeeklyTrendSection(weeklyTrend = weeklyTrend, profile = appData.profile)
+        }
+
+        item {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 MetricCard(
                     icon = Icons.Default.Eco,
@@ -189,74 +217,214 @@ fun DashboardScreen(
                         unit = "g",
                         label = "Starch",
                         subtitle = "Goal: ${appData.profile.resistantStarchGoal}g",
-                        color = Color(0xFFFFC107),
+                        progress = if (appData.profile.resistantStarchGoal > 0) currentNutrients.resistantStarch / appData.profile.resistantStarchGoal else 0f,
+                        color = Color(0xFF2196F3),
                         modifier = Modifier.weight(1f)
                     )
+
                     MetricCard(
                         icon = Icons.Default.Opacity,
                         value = "${currentNutrients.polyphenols.toInt()}",
                         unit = "mg",
                         label = "Polyphenols",
                         subtitle = "Goal: ${appData.profile.polyphenolGoal}mg",
+                        progress = if (appData.profile.polyphenolGoal > 0) currentNutrients.polyphenols / appData.profile.polyphenolGoal else 0f,
                         color = Color(0xFF9C27B0),
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
         }
-
+        
         item {
-            MicrobeStatusGrid(shifts)
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "Microbe Shifts",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = TranscityFont,
+                    color = Color.White
+                )
+                MicrobeStatusGrid(shifts = shifts)
+            }
         }
 
         item {
-            val insight = when {
-                healthScore < 0 -> "High Inflammation" to "Your gut is in a pro-inflammatory state. Avoid processed sugars and fats immediately."
-                healthScore < 50 -> "Pro-inflammatory" to "Your gut diversity is low. Focus on increasing prebiotic fiber and reducing refined sugars."
-                healthScore < 80 -> "Building Stability" to "Good progress! Your microbiome is stabilizing. Add more fermented foods to boost Lactobacillus."
-                else -> "Optimal Diversity" to "Excellent! Your dietary patterns are promoting a highly diverse and stable microbial environment."
-            }
-
-            var showPlanDialog by remember { mutableStateOf(false) }
-            val dietPlan = appData.dietPlan
-
-            InsightCard(
-                title = "Focus: ${insight.first}",
-                description = insight.second,
-                hasPlan = dietPlan != null,
-                onAction = {
-                    if (dietPlan != null) {
-                        showPlanDialog = true
-                    } else {
-                        viewModel.generateAiDietPlan()
-                    }
-                }
-            )
-
-            if (showPlanDialog && dietPlan != null) {
-                AlertDialog(
-                    onDismissRequest = { showPlanDialog = false },
-                    title = { Text("AI Diet Plan") },
-                    text = {
-                        Box(modifier = Modifier.heightIn(max = 400.dp)) {
-                            LazyColumn {
-                                item { Text(dietPlan) }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showPlanDialog = false }) {
-                            Text("Close")
-                        }
-                    },
-                    containerColor = SurfaceContainerLowest,
-                    titleContentColor = Color.White,
-                    textContentColor = Color.White
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "Personalized Insights",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = TranscityFont,
+                    color = Color.White
+                )
+                
+                InsightCard(
+                    title = "Microbiome Balance",
+                    description = if (healthScore > 70) "Your gut ecosystem is thriving. Bifidobacterium levels are optimal." else "Increase fiber intake to boost SCFA-producing bacteria.",
+                    isPositive = healthScore > 70,
+                    onClick = {}
+                )
+                
+                InsightCard(
+                    title = "Prebiotic Density",
+                    description = "Recent meals show strong resistant starch intake, promoting Akkermansia growth.",
+                    isPositive = true,
+                    onClick = {}
                 )
             }
         }
+        
+        item { Spacer(modifier = Modifier.height(120.dp)) }
+    }
+}
 
-        item { Spacer(modifier = Modifier.height(100.dp)) }
+@Composable
+fun WeeklyTrendSection(weeklyTrend: List<Float>, profile: com.example.gutsync.data.storage.UserProfile) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(28.dp))
+            .background(Color.White.copy(alpha = 0.03f))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)), RoundedCornerShape(28.dp))
+            .padding(20.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Weekly Trends",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                fontFamily = TranscityFont
+            )
+            Text(
+                text = "Last 7 Days",
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.4f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 7-Day Bar Chart
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            val days = listOf("M", "T", "W", "T", "F", "S", "S")
+            val calendar = java.util.Calendar.getInstance()
+            val currentDayIdx = (calendar.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7
+            
+            weeklyTrend.forEachIndexed { index, score ->
+                // Calculate which day of the week this bar represents
+                val dayLabel = days[(currentDayIdx - (6 - index) + 7) % 7]
+                TrendBar(label = dayLabel, progress = score, isCurrent = index == 6)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Weekly Check-in Grid
+        Text(
+            text = "Activity Streak",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White.copy(alpha = 0.6f),
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            val days = listOf("M", "T", "W", "T", "F", "S", "S")
+            val calendar = java.util.Calendar.getInstance()
+            val currentDayIdx = (calendar.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7
+
+            days.forEachIndexed { index, day ->
+                val isChecked = profile.weeklyCheckIns.getOrNull(index) ?: false
+                val isCurrent = index == currentDayIdx
+
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                isChecked -> Color.White
+                                isCurrent -> Color.White.copy(alpha = 0.08f)
+                                else -> Color.White.copy(alpha = 0.04f)
+                            }
+                        )
+                        .border(
+                            width = if (isCurrent && !isChecked) 1.dp else 0.dp,
+                            color = Color.White.copy(alpha = 0.25f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isChecked) {
+                        Icon(
+                            Icons.Default.LocalFireDepartment,
+                            null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    } else {
+                        Text(
+                            text = day,
+                            fontSize = 10.sp,
+                            color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.25f),
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TrendBar(label: String, progress: Float, isCurrent: Boolean) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(1000, easing = LinearOutSlowInEasing),
+        label = "trend_bar"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(28.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.White.copy(alpha = 0.05f)),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(animatedProgress)
+                    .background(if (isCurrent) Color.White else Color.White.copy(alpha = 0.4f))
+            )
+        }
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.3f),
+            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium
+        )
     }
 }
 
@@ -267,141 +435,91 @@ fun MetricCard(
     unit: String,
     label: String,
     subtitle: String,
+    progress: Float,
     color: Color,
     modifier: Modifier = Modifier,
-    progress: Float? = null,
+    score: Float? = null,
     isSlim: Boolean = false
 ) {
+    val animatedProgress by animateFloatAsState(targetValue = progress.coerceIn(0f, 1f), animationSpec = tween(1000), label = "progress")
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E)),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
-        modifier = modifier
+        modifier = modifier,
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.03f)),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
     ) {
-        if (isSlim) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(color.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = color,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = value,
-                                fontSize = 32.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = unit,
-                                fontSize = 16.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
-                        }
-                        Text(
-                            text = label,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            fontFamily = TranscityFont,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    }
-
-                    Text(
-                        text = subtitle,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                if (progress != null) {
-                    LinearProgressIndicator(
-                        progress = { progress.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(4.dp),
-                        color = color,
-                        trackColor = color.copy(alpha = 0.1f),
-                        strokeCap = StrokeCap.Round
-                    )
-                }
-            }
-        } else {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .size(40.dp)
+                        .clip(CircleShape)
                         .background(color.copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = color,
-                        modifier = Modifier.size(24.dp)
-                    )
+                    Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
                 }
-
-                Column {
-                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = value,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = unit,
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                    }
+                
+                if (score != null) {
                     Text(
-                        text = label,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        fontFamily = TranscityFont,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                }
-
-                if (progress != null) {
-                    LinearProgressIndicator(
-                        progress = { progress.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(4.dp),
+                        text = "${(score * 100).toInt()}%",
                         color = color,
-                        trackColor = color.copy(alpha = 0.1f),
-                        strokeCap = StrokeCap.Round
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
                     )
                 }
+            }
 
+            Column {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = value,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = " $unit",
+                        fontSize = 16.sp,
+                        color = Color.White.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
+                Text(
+                    text = label,
+                    fontSize = 14.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium
+                )
                 Text(
                     text = subtitle,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.3f)
+                )
+            }
+
+            // Progress Bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(if (isSlim) 6.dp else 4.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.05f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(animatedProgress)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(color)
                 )
             }
         }
@@ -410,64 +528,72 @@ fun MetricCard(
 
 @Composable
 fun MicrobeStatusGrid(shifts: List<MicrobeShift>) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            val bifido = shifts.find { it.microbeType == MicrobeType.BIFIDOBACTERIUM }?.shiftPercentage?.toInt() ?: 0
-            val lacto = shifts.find { it.microbeType == MicrobeType.LACTOBACILLUS }?.shiftPercentage?.toInt() ?: 0
-            
-            MetricCard(
-                icon = Icons.Default.Eco, 
-                value = "$bifido%",
-                unit = "",
-                label = "Bifidobacterium",
-                subtitle = getStatusText(bifido),
-                progress = bifido / 100f,
-                color = Color(0xFF4CAF50),
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                icon = Icons.Default.Eco,
-                value = "$lacto%",
-                unit = "",
-                label = "Lactobacillus",
-                subtitle = getStatusText(lacto),
-                progress = lacto / 100f,
-                color = Color(0xFF8BC34A),
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            val akker = shifts.find { it.microbeType == MicrobeType.AKKERMANSIA }?.shiftPercentage?.toInt() ?: 0
-            val bacter = shifts.find { it.microbeType == MicrobeType.BACTEROIDES }?.shiftPercentage?.toInt() ?: 0
-            
-            MetricCard(
-                icon = Icons.Default.Eco,
-                value = "$akker%",
-                unit = "",
-                label = "Akkermansia",
-                subtitle = getStatusText(akker),
-                progress = akker / 100f,
-                color = Color(0xFFCDDC39),
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                icon = Icons.Default.Eco,
-                value = "$bacter%",
-                unit = "",
-                label = "Bacteroides",
-                subtitle = getStatusText(bacter),
-                progress = bacter / 100f,
-                color = Color(0xFFFFEB3B),
-                modifier = Modifier.weight(1f)
-            )
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        shifts.forEach { shift ->
+            Surface(
+                color = Color.White.copy(alpha = 0.03f),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.05f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = shift.microbeType.displayName.first().toString(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = shift.microbeType.displayName,
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = getStatusText(shift.shiftPercentage.toInt()),
+                                color = Color.White.copy(alpha = 0.4f),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    
+                    val shiftColor = if (shift.shiftPercentage > 0) Color(0xFF4CAF50) else if (shift.shiftPercentage < 0) Color(0xFFFF5252) else Color.White.copy(alpha = 0.2f)
+                    Text(
+                        text = if (shift.shiftPercentage > 0) "+${shift.shiftPercentage.toInt()}%" else "${shift.shiftPercentage.toInt()}%",
+                        color = shiftColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
         }
     }
 }
 
-fun getStatusText(percentage: Int) = when {
-    percentage < 30 -> "Low"
-    percentage < 70 -> "Moderate"
-    else -> "Optimal"
+fun getStatusText(percentage: Int): String {
+    return when {
+        percentage > 20 -> "Significant Growth"
+        percentage > 0 -> "Stable Growth"
+        percentage < -20 -> "Suppressed"
+        else -> "Balanced"
+    }
 }
 
 @Composable
@@ -717,36 +843,52 @@ fun ScoreHeroSection(score: Int) {
 }
 
 @Composable
-fun InsightCard(title: String, description: String, hasPlan: Boolean, onAction: () -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(12.dp),
+fun InsightCard(
+    title: String,
+    description: String,
+    isPositive: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        color = Color.White.copy(alpha = 0.03f),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(24.dp)) {
-            Text(
-                text = title,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.Black
-            )
-            Text(
-                text = description,
-                fontSize = 16.sp,
-                color = Color(0xFF52525B),
-                lineHeight = 24.sp,
-                modifier = Modifier.padding(vertical = 16.dp)
-            )
-            Button(
-                onClick = onAction,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
-                shape = CircleShape,
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (isPositive) Color(0xFF4CAF50).copy(alpha = 0.1f) else Color(0xFFFFC107).copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
             ) {
+                Icon(
+                    imageVector = if (isPositive) Icons.Default.Science else Icons.Default.Info,
+                    contentDescription = null,
+                    tint = if (isPositive) Color(0xFF4CAF50) else Color(0xFFFFC107),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column {
                 Text(
-                    text = if (hasPlan) "View Diet Plan" else "Generate AI Diet Plan",
+                    text = title,
                     color = Color.White,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = description,
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
                 )
             }
         }

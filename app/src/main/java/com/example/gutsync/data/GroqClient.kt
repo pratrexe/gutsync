@@ -31,7 +31,6 @@ object GroqClient {
         .readTimeout(260, java.util.concurrent.TimeUnit.SECONDS)
         .writeTimeout(260, java.util.concurrent.TimeUnit.SECONDS)
         .eventListener(object : EventListener() {
-            // ... (keep existing logging)
             override fun callStart(call: Call) { Log.d(TAG, "CALL START: ${System.currentTimeMillis()}") }
             override fun dnsStart(call: Call, domainName: String) { Log.d(TAG, "DNS START: ${System.currentTimeMillis()}") }
             override fun dnsEnd(call: Call, domainName: String, inetAddressList: List<InetAddress>) { Log.d(TAG, "DNS END: ${System.currentTimeMillis()}") }
@@ -58,7 +57,7 @@ object GroqClient {
      */
     suspend fun generateContent(
         prompt: String,
-        model: String = "llama-3.3-70b-versatile",
+        model: String = "meta-llama/llama-4-scout-17b-16e-instruct",
         isJson: Boolean = false,
         base64Image: String? = null
     ): String = withContext(Dispatchers.IO) {
@@ -70,133 +69,158 @@ object GroqClient {
     }
 
     /**
-     * Streaming version using Flow
+     * Streaming version using Flow with automated fallback logic
      */
     fun generateContentStream(
         prompt: String,
-        model: String = "llama-3.3-70b-versatile",
+        model: String = "meta-llama/llama-4-scout-17b-16e-instruct",
         isJson: Boolean = false,
-        base64Image: String? = null
+        base64Image: String? = null,
+        isFallback: Boolean = false
     ): Flow<String> = flow {
-        val (url, key) = when {
-            isNvidiaModel(model) -> NVIDIA_URL to NVIDIA_API_KEY
-            isOpenRouterModel(model) -> OPENROUTER_URL to OPENROUTER_API_KEY
-            else -> GROQ_URL to GROQ_API_KEY
-        }
+        try {
+            val (url, key) = when {
+                isNvidiaModel(model) -> NVIDIA_URL to NVIDIA_API_KEY
+                isOpenRouterModel(model) -> OPENROUTER_URL to OPENROUTER_API_KEY
+                else -> GROQ_URL to GROQ_API_KEY
+            }
 
-        // Only enable streaming for non-OpenRouter models
-        val useStreaming = !isOpenRouterModel(model)
+            // Only enable streaming for non-OpenRouter models
+            val useStreaming = !isOpenRouterModel(model)
 
-        val contentArray = JSONArray().apply {
-            put(JSONObject().apply {
-                put("type", "text")
-                put("text", prompt)
-            })
-            base64Image?.let {
+            val contentArray = JSONArray().apply {
                 put(JSONObject().apply {
-                    put("type", "image_url")
-                    put("image_url", JSONObject().apply {
-                        put("url", "data:image/jpeg;base64,$it")
+                    put("type", "text")
+                    put("text", prompt)
+                })
+                base64Image?.let {
+                    put(JSONObject().apply {
+                        put("type", "image_url")
+                        put("image_url", JSONObject().apply {
+                            put("url", "data:image/jpeg;base64,$it")
+                        })
+                    })
+                }
+            }
+
+            val json = JSONObject().apply {
+                put("model", model.removePrefix("nvidia/"))
+                if (useStreaming) put("stream", true)
+                put("messages", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        if (base64Image == null) {
+                            put("content", prompt)
+                        } else {
+                            put("content", contentArray)
+                        }
                     })
                 })
-            }
-        }
 
-        val json = JSONObject().apply {
-            put("model", model.removePrefix("nvidia/"))
-            if (useStreaming) put("stream", true)
-            put("messages", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("role", "user")
-                    if (base64Image == null) {
-                        put("content", prompt)
-                    } else {
-                        put("content", contentArray)
+                // Model-specific optimized settings
+                when {
+                    isNvidiaModel(model) -> {
+                        put("max_tokens", 16384)
+                        put("temperature", 1.00)
+                        put("top_p", 0.95)
+                        put("chat_template_kwargs", JSONObject().apply {
+                            put("enable_thinking", true)
+                        })
                     }
-                })
-            })
+                    model.contains("gemma-4") -> {
+                        if (base64Image == null) put("include_reasoning", true)
+                        put("max_tokens", 4096)
+                    }
+                    model.contains("llama-4-scout") -> {
+                        put("max_completion_tokens", 1024)
+                        put("temperature", 1.0)
+                        put("top_p", 1.0)
+                    }
+                    model.startsWith("meta-llama/llama-4.1") -> {
+                        put("max_tokens", 8192)
+                        put("temperature", 0.7)
+                    }
+                }
 
-            // Model-specific optimized settings
-            when {
-                isNvidiaModel(model) -> {
-                    put("max_tokens", 16384)
-                    put("temperature", 1.00)
-                    put("top_p", 0.95)
-                    put("chat_template_kwargs", JSONObject().apply {
-                        put("enable_thinking", true)
+                if (isJson && base64Image == null) {
+                    put("response_format", JSONObject().apply {
+                        put("type", "json_object")
                     })
                 }
-                model.contains("gemma-4") -> {
-                    put("include_reasoning", true)
-                    put("max_tokens", 4096)
-                }
-                model == "meta-llama/llama-4-scout-17b-16e-instruct" -> {
-                    put("max_completion_tokens", 1024)
-                    put("temperature", 1.00)
-                    put("top_p", 1.00)
-                }
             }
 
-            if (isJson && base64Image == null) {
-                put("response_format", JSONObject().apply {
-                    put("type", "json_object")
-                })
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+            val requestBuilder = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $key")
+                .addHeader("Content-Type", "application/json")
+                .post(body)
+
+            if (useStreaming) {
+                requestBuilder.addHeader("Accept", "text/event-stream")
             }
-        }
 
-        val body = json.toString().toRequestBody("application/json".toMediaType())
-        val requestBuilder = Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer $key")
-            .addHeader("Content-Type", "application/json")
-            .post(body)
+            if (url == OPENROUTER_URL) {
+                requestBuilder.addHeader("HTTP-Referer", "https://gutsync.app")
+                requestBuilder.addHeader("X-Title", "GutSync")
+            }
 
-        if (useStreaming) {
-            requestBuilder.addHeader("Accept", "text/event-stream")
-        }
+            val response = client.newCall(requestBuilder.build()).execute()
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string()
+                if (!isFallback && isOpenRouterModel(model)) {
+                    Log.w(TAG, "OpenRouter failed ($model), attempting Groq fallback: $errorBody")
+                    val fallbackModel = "meta-llama/llama-4-scout-17b-16e-instruct"
+                    generateContentStream(prompt, fallbackModel, isJson, base64Image, isFallback = true).collect {
+                        emit(it)
+                    }
+                    return@flow
+                }
+                throw Exception("API Error ${response.code}: $errorBody")
+            }
 
-        if (url == OPENROUTER_URL) {
-            requestBuilder.addHeader("HTTP-Referer", "https://gutsync.app")
-            requestBuilder.addHeader("X-Title", "GutSync")
-        }
-
-        val response = client.newCall(requestBuilder.build()).execute()
-        if (!response.isSuccessful) {
-            val errorBody = response.body?.string()
-            throw Exception("API Error ${response.code}: $errorBody")
-        }
-
-        if (!useStreaming) {
-            val responseBody = response.body?.string()
-            val content = JSONObject(responseBody ?: "")
-                .getJSONArray("choices")
-                .getJSONObject(0)
-                .getJSONObject("message")
-                .getString("content")
-            emit(content)
-        } else {
-            val reader = response.body?.source()?.inputStream()?.bufferedReader()
-            reader?.use { r ->
-                var line: String?
-                while (r.readLine().also { line = it } != null) {
-                    if (line?.startsWith("data: ") == true) {
-                        val data = line?.substringAfter("data: ")?.trim()
-                        if (data == "[DONE]") break
-                        
-                        try {
-                            val jsonResp = JSONObject(data ?: "")
-                            val content = jsonResp.getJSONArray("choices")
-                                .getJSONObject(0)
-                                .getJSONObject("delta")
-                                .optString("content", "")
-                            if (content.isNotEmpty()) {
-                                emit(content)
+            if (!useStreaming) {
+                val responseBody = response.body?.string()
+                val content = JSONObject(responseBody ?: "")
+                    .getJSONArray("choices")
+                    .getJSONObject(0)
+                    .getJSONObject("message")
+                    .optString("content", "")
+                emit(content)
+            } else {
+                val reader = response.body?.source()?.inputStream()?.bufferedReader()
+                reader?.use { r ->
+                    var line: String?
+                    while (r.readLine().also { line = it } != null) {
+                        if (line?.startsWith("data: ") == true) {
+                            val data = line?.substringAfter("data: ")?.trim()
+                            if (data == "[DONE]") break
+                            
+                            try {
+                                val jsonResp = JSONObject(data ?: "")
+                                val content = jsonResp.getJSONArray("choices")
+                                    .getJSONObject(0)
+                                    .getJSONObject("delta")
+                                    .optString("content", "")
+                                if (content.isNotEmpty()) {
+                                    emit(content)
+                                }
+                            } catch (e: Exception) {
+                                // Skip malformed chunks
                             }
-                        } catch (e: Exception) {
-                            // Skip malformed chunks
                         }
                     }
                 }
+            }
+        } catch (e: Exception) {
+            if (!isFallback && isOpenRouterModel(model)) {
+                Log.w(TAG, "OpenRouter connection error, attempting Groq fallback", e)
+                val fallbackModel = "meta-llama/llama-4-scout-17b-16e-instruct"
+                generateContentStream(prompt, fallbackModel, isJson, base64Image, isFallback = true).collect {
+                    emit(it)
+                }
+            } else {
+                throw e
             }
         }
     }

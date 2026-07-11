@@ -118,7 +118,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
     // AI Models
     private val visionModel = "google/gemma-4-31b-it:free"
     private val textModel = "google/gemma-4-31b-it:free"
-    private val groqTextModel = "llama-3.3-70b-versatile" // Keep as fallback
+    private val groqTextModel = "meta-llama/llama-4-scout-17b-16e-instruct"
 
     private fun Bitmap.toBase64(): String {
         val scaled = Bitmap.createScaledBitmap(this, 1024, (height * 1024f / width).toInt(), true)
