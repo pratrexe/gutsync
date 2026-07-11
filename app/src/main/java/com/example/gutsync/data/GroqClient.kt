@@ -126,6 +126,10 @@ object GroqClient {
                         put("enable_thinking", true)
                     })
                 }
+                model.contains("gemma-4") -> {
+                    put("include_reasoning", true)
+                    put("max_tokens", 4096)
+                }
                 model == "meta-llama/llama-4-scout-17b-16e-instruct" -> {
                     put("max_completion_tokens", 1024)
                     put("temperature", 1.00)

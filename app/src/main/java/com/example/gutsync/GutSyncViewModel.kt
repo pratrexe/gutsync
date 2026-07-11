@@ -116,8 +116,9 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // AI Models
-    private val groqLlamaVisionModel = "llama-3.2-11b-vision-preview"
-    private val groqTextModel = "llama-3.3-70b-versatile"
+    private val visionModel = "google/gemma-4-31b-it:free"
+    private val textModel = "google/gemma-4-31b-it:free"
+    private val groqTextModel = "llama-3.3-70b-versatile" // Keep as fallback
 
     private fun Bitmap.toBase64(): String {
         val scaled = Bitmap.createScaledBitmap(this, 1024, (height * 1024f / width).toInt(), true)
@@ -189,7 +190,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 
                 val result = GroqClient.generateContent(
                     prompt = visionPrompt,
-                    model = groqLlamaVisionModel,
+                    model = visionModel,
                     isJson = false,
                     base64Image = base64
                 )
@@ -272,7 +273,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 
                 val scorecard = MicrobeImpactCalculator.calculateGIE(nutrientData)
                 
-                // STEP 2: Use Groq for the scientific explanation
+                // STEP 2: Use Gemma 4 for the scientific explanation
                 val explanationPrompt = """
                     Explain this Gut Health Score: ${scorecard.gutHealthScore}/100 for $quantityGrams grams of ${nutrientData.foodName}.
                     Microbe Shifts: ${scorecard.predictedShifts.joinToString { shift -> "${shift.microbeType.displayName}: ${shift.shiftPercentage}%" }}
@@ -282,7 +283,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
                 
                 val explanation = GroqClient.generateContent(
                     prompt = explanationPrompt,
-                    model = groqTextModel,
+                    model = textModel,
                     isJson = false
                 ).replace("*", "").replace("#", "")
 
@@ -415,7 +416,7 @@ class GutSyncViewModel(application: Application) : AndroidViewModel(application)
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val modelToUse = groqTextModel
+                val modelToUse = if (_currentSession.value.preferredModel == "Groq") groqTextModel else textModel
                 val profile = appData.value.profile
                 val healthContext = if (profile.healthConditions.isNotEmpty()) {
                     "User health profile: ${profile.healthConditions.joinToString()}. Personalize advice accordingly."

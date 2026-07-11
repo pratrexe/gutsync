@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Restaurant
@@ -50,6 +51,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -209,7 +211,50 @@ fun AskCooperScreen(viewModel: GutSyncViewModel = viewModel()) {
         }
 
         // History Drawer/Overlay
-        if (showHistory) {
+        // Model Selector Header
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+            .height(56.dp)
+            .background(Color(0xFF1C1C1E).copy(alpha = 0.8f), RoundedCornerShape(28.dp))
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { showHistory = true }) {
+                Icon(Icons.Default.History, "History", tint = Color.White)
+            }
+
+            Row(
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                    .padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ModelTab(
+                    name = "Gemma 4",
+                    isSelected = currentSession.preferredModel == "OpenRouter",
+                    onClick = { if (currentSession.preferredModel != "OpenRouter") viewModel.toggleSessionModel() }
+                )
+                ModelTab(
+                    name = "Llama 3.3",
+                    isSelected = currentSession.preferredModel == "Groq",
+                    onClick = { if (currentSession.preferredModel != "Groq") viewModel.toggleSessionModel() }
+                )
+            }
+
+            IconButton(onClick = { viewModel.startNewChat() }) {
+                Icon(Icons.Default.Add, "New Chat", tint = Color.White)
+            }
+        }
+    }
+
+    if (showHistory) {
             Surface(
                 color = Color.Black.copy(alpha = 0.95f),
                 modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)
@@ -303,6 +348,33 @@ fun SuggestionChip(icon: ImageVector, text: String, onClick: () -> Unit) {
             Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
             Text(text = text, color = Color.White, fontSize = 13.sp)
         }
+    }
+}
+
+@Composable
+private fun ModelTab(
+    name: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .background(
+                if (isSelected) Color(0xFF2C2C2E) else Color.Transparent,
+                RoundedCornerShape(16.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = name,
+            style = TextStyle(
+                color = if (isSelected) Color.White else Color(0xFFA1A1AA),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        )
     }
 }
 
